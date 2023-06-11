@@ -110,40 +110,43 @@ int main(void) {
   auto diffuse_mat = std::make_shared<lambertian>(color(0.9, 0.5, 0.5));
   auto plane_mat = std::make_shared<lambertian>(color(0.5, 0.5, 0.5));
 
-  camera cam(aspect_ratio);
-  ray_tracer tracer(cam, 100, 50, image_width, image_height);
+  camera cam(90, aspect_ratio);
+  ray_tracer tracer(cam, 4, 50, image_width, image_height);
   tracer.add_object(
       std::make_shared<plane>(point3(0, -0.5, 0), vec3(0, 1, 0), plane_mat));
   tracer.add_object(
-      std::make_shared<sphere>(point3(0, 0, -1), 0.5, diffuse_mat));
+      std::make_shared<sphere>(point3(0, 0, -5), 0.5, diffuse_mat));
   tracer.add_object(
-      std::make_shared<sphere>(point3(1.2, 0, -1), 0.2, diffuse_mat));
+      std::make_shared<sphere>(point3(1.2, 0, -5), 0.2, diffuse_mat));
   thread_pool pool(8);
 
   std::vector<color> color_map(image_height * image_width);
-  for (size_t i = 0; i < image_height * image_width; ++i) {
-    color_map[i] = color(0, 0, 0);
-  }
+  std::atomic_bool done = false;
+  auto t = std::thread([&]() {
+    while (!done) {
+      stopwatch sw;
+      size_t segments = pool.pool_size();
+      for (size_t i = 0; i < segments; ++i) {
+        pool.enqueue([&, i]() {
+          for (size_t j = i; j < image_height * image_width; j += segments) {
+            size_t x = j % image_width;
+            size_t y = j / image_width;
+            REAL_T u = static_cast<REAL_T>(x) / (image_width - 1);
+            REAL_T v = static_cast<REAL_T>(y) / (image_height - 1);
+            v = 1.0 - v;
+            auto c = tracer.compute(u, v);
+            color_map[j] = c;
+          }
+        });
+      }
+      pool.wait();
+      std::cout << "\rElapsed time: " << sw.elapsed_str() << std::flush;
+    }
+  });
 
   while (!WindowShouldClose()) {
     BeginDrawing();
     ClearBackground(BLACK);
-    stopwatch sw;
-    size_t segments = pool.pool_size();
-    for (size_t i = 0; i < segments; ++i) {
-      pool.enqueue([&, i]() {
-        for (size_t j = i; j < image_height * image_width; j += segments) {
-          size_t x = j % image_width;
-          size_t y = j / image_width;
-          REAL_T u = static_cast<REAL_T>(x) / (image_width - 1);
-          REAL_T v = static_cast<REAL_T>(y) / (image_height - 1);
-          v = 1.0 - v;
-          auto c = tracer.compute(u, v);
-          color_map[j] = c;
-        }
-      });
-    }
-    pool.wait();
     for (int j = 0; j < image_height; ++j) {
       for (int i = 0; i < image_width; ++i) {
         auto const &c = color_map[j * image_width + i];
@@ -151,8 +154,11 @@ int main(void) {
       }
     }
     EndDrawing();
-    std::cout << "\rElapsed time: " << sw.elapsed_str() << std::flush;
+    std::this_thread::sleep_for(std::chrono::milliseconds(10));
   }
+
+  done = true;
+  t.join();
 
   CloseWindow();
   return 0;

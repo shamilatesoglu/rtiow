@@ -4,9 +4,11 @@
 
 class camera {
 public:
-  camera(REAL_T aspect_ratio) {
-    auto viewport_height = 2.0;
-    auto viewport_width = aspect_ratio * viewport_height;
+  camera(REAL_T hfov, REAL_T aspect_ratio) {
+    auto theta = deg2rad(hfov);
+    auto viewport_width = 2.0 * tan(theta / 2);
+    auto viewport_height = viewport_width / aspect_ratio;
+
     auto focal_length = 1.0;
 
     origin = point3(0, 0, 0);
