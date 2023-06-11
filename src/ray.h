@@ -2,11 +2,12 @@
 
 #include "common.h"
 
+#include "material.h"
 #include "vec.h"
 
 struct ray {
   ray() {}
-  ray(const point3 &origin, const vec3 &direction)
+  ray(const point3& origin, const vec3& direction)
       : orig(origin), dir(direction) {}
 
   point3 origin() const { return orig; }
@@ -23,13 +24,19 @@ struct hit_record {
   vec3 normal;
   REAL_T t;
   bool front_face;
-  inline void set_face_normal(const ray &r, const vec3 &outward_normal) {
+  std::shared_ptr<material> mat = nullptr;
+  inline void set_face_normal(const ray& r, const vec3& outward_normal) {
     front_face = dot(r.direction(), outward_normal) < 0;
     normal = front_face ? outward_normal : -outward_normal;
   }
 };
 
 struct hittable {
-  virtual bool hit(const ray &r, REAL_T t_min, REAL_T t_max,
-                   hit_record &rec) const = 0;
+  virtual ~hittable() = default;
+  explicit hittable(std::shared_ptr<material> m) : mat(std::move(m)) {}
+  virtual bool hit(const ray& r,
+                   REAL_T t_min,
+                   REAL_T t_max,
+                   hit_record& rec) const = 0;
+  std::shared_ptr<material> mat = nullptr;
 };

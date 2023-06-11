@@ -39,6 +39,12 @@ struct vec3 {
     return e[0] * e[0] + e[1] * e[1] + e[2] * e[2];
   }
 
+  bool near_zero() const {
+    // Return true if the vector is close to zero in all dimensions.
+    const auto s = 1e-8;
+    return (fabs(e[0]) < s) && (fabs(e[1]) < s) && (fabs(e[2]) < s);
+  }
+
   REAL_T e[3];
 };  // vec3 Utility Functions
 

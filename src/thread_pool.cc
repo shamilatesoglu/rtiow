@@ -19,7 +19,7 @@ thread_pool::~thread_pool() {
   }
 }
 
-void thread_pool::enqueue(std::function<void()> task) {
+void thread_pool::enqueue(std::function<void()>&& task) {
   std::unique_lock lock(tasks_mutex);
   tasks.push(std::move(task));
   ++task_count;

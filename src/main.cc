@@ -10,10 +10,12 @@
 
 #include "stopwatch.h"
 
-color real_to_screen(const color &c) { return 255.999 * c; }
+color real_to_screen(const color& c) {
+  return 255.999 * c;
+}
 
 // c: Color in [0, 1]
-void draw_pixel(int x, int y, const color &c) {
+void draw_pixel(int x, int y, const color& c) {
   auto sc = real_to_screen(c);
   auto ir = static_cast<uint8_t>(sc.x());
   auto ig = static_cast<uint8_t>(sc.y());
@@ -22,17 +24,24 @@ void draw_pixel(int x, int y, const color &c) {
 }
 
 struct ray_tracer {
-  ray_tracer(const class camera &cam, uint8_t multi_sample_count)
-      : multi_sample_count(multi_sample_count), camera(cam) {}
+  ray_tracer(const class camera& cam,
+             uint8_t multi_sample_count,
+             size_t image_width,
+             size_t image_height)
+      : multi_sample_count(multi_sample_count),
+        camera(cam),
+        image_width(image_width),
+        image_height(image_height) {
+    pixel_width = 1.0 / image_width;
+    pixel_height = 1.0 / image_height;
+  }
 
   void add_object(std::shared_ptr<hittable> obj) {
     objects.emplace_back(std::move(obj));
   }
   void clear_objects() { objects.clear(); }
 
-  color compute(REAL_T u, REAL_T v, size_t image_width, size_t image_height) {
-    REAL_T pixel_width = 1.0 / image_width;
-    REAL_T pixel_height = 1.0 / image_height;
+  color compute(REAL_T u, REAL_T v) {
     color c;
     for (int i = 0; i < multi_sample_count; ++i) {
       REAL_T up = u + random_real() * pixel_width;
@@ -44,23 +53,30 @@ struct ray_tracer {
     return c / multi_sample_count;
   }
 
-  color background_color(const ray &r) {
+  color background_color(const ray& r) {
     vec3 unit_direction = unit_vector(r.direction());
     auto t = 0.5 * (unit_direction.y() + 1.0);
     return (1.0 - t) * color(1.0, 1.0, 1.0) + t * color(0.5, 0.7, 1.0);
   }
 
-protected:
-  bool hit(REAL_T u, REAL_T v, color &out_color) {
+ protected:
+  bool hit(REAL_T u, REAL_T v, color& out_color) {
     ray r = camera.get_ray(u, v);
     bool hit_anything = false;
     hit_record rec;
     REAL_T closest_so_far = INFINITY;
-    for (const auto &obj : objects) {
+    for (const auto& obj : objects) {
       if (obj->hit(r, 0, closest_so_far, rec)) {
         hit_anything = true;
         closest_so_far = rec.t;
-        out_color = 0.5 * (rec.normal + color(1, 1, 1));
+        color attenuation;
+        ray scattered;
+        if (rec.mat->scatter(r, rec, attenuation, scattered)) {
+          out_color = attenuation * compute(scattered.direction().x(),
+                                            scattered.direction().y());
+        } else {
+          out_color = color(0, 0, 0);
+        }
       }
     }
     if (!hit_anything) {
@@ -70,7 +86,11 @@ protected:
   }
 
   uint8_t multi_sample_count;
-  const camera &camera;
+  const camera& camera;
+  size_t image_width;
+  size_t image_height;
+  REAL_T pixel_width;
+  REAL_T pixel_height;
   std::vector<std::shared_ptr<hittable>> objects;
 };
 
@@ -82,11 +102,15 @@ int main(void) {
 
   InitWindow(image_width, image_height, "RTIOW");
 
+  auto diffuse_mat = std::make_shared<diffuse>(color(0.5, 0.5, 0.5));
+
   camera cam(aspect_ratio);
-  ray_tracer tracer(cam, 1);
-  tracer.add_object(std::make_shared<sphere>(point3(0, 0, -1), 0.5));
-  tracer.add_object(std::make_shared<sphere>(point3(1.2, 0, -1), 0.2));
-  thread_pool pool(8);
+  ray_tracer tracer(cam, 4, image_width, image_height);
+  tracer.add_object(
+      std::make_shared<sphere>(point3(0, 0, -1), 0.5, diffuse_mat));
+  tracer.add_object(
+      std::make_shared<sphere>(point3(1.2, 0, -1), 0.2, diffuse_mat));
+  thread_pool pool(32);
 
   std::vector<color> color_map(image_height * image_width);
   for (size_t i = 0; i < image_height * image_width; ++i) {
@@ -106,7 +130,7 @@ int main(void) {
           REAL_T u = static_cast<REAL_T>(x) / (image_width - 1);
           REAL_T v = static_cast<REAL_T>(y) / (image_height - 1);
           v = 1.0 - v;
-          auto c = tracer.compute(u, v, image_width, image_height);
+          auto c = tracer.compute(u, v);
           color_map[j] = c;
         }
       });
@@ -114,7 +138,7 @@ int main(void) {
     pool.wait();
     for (int j = 0; j < image_height; ++j) {
       for (int i = 0; i < image_width; ++i) {
-        auto const & c = color_map[j * image_width + i];
+        auto const& c = color_map[j * image_width + i];
         draw_pixel(i, j, c);
       }
     }
