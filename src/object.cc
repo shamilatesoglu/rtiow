@@ -31,3 +31,29 @@ bool sphere::hit(const ray &r, REAL_T t_min, REAL_T t_max,
   rec.mat = mat;
   return true;
 }
+
+bool plane::hit(const ray &r, REAL_T t_min, REAL_T t_max,
+                hit_record &rec) const {
+  // Ray Center: R
+  // Plane Center: S
+  // Day Direction: d
+  // Ray Eq: R(t) = R + td
+  // (S - R) ⋅ n = 0
+  // (S - (R + td)) ⋅ n = 0
+  // (S - R) ⋅ n - t(d ⋅ n) = 0
+  // t = ((S - R) ⋅ n) / (d ⋅ n)
+  auto const &R = r.origin();
+  auto const &S = center;
+  auto const &d = r.direction();
+  auto n = normal;
+  auto SR = S - R;
+  auto t = dot(SR, n) / dot(d, n);
+  if (t < t_min || t > t_max) {
+    return false;
+  }
+  rec.t = t;
+  rec.p = r.at(t);
+  rec.set_face_normal(r, n);
+  rec.mat = mat;
+  return true;
+}
