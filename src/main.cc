@@ -88,7 +88,7 @@ int main(void) {
   tracer.add_object(std::make_shared<sphere>(point3(1.2, 0, -1), 0.2));
   thread_pool pool(8);
 
-  color color_map[image_height * image_width];
+  std::vector<color> color_map(image_height * image_width);
   for (size_t i = 0; i < image_height * image_width; ++i) {
     color_map[i] = color(0, 0, 0);
   }

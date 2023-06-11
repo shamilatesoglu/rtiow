@@ -4,6 +4,9 @@
 #define REAL_T double
 #endif
 
+#ifdef _WIN32
+#define M_PI 3.14159265358979323846
+#endif
 #include <cmath>
 #include <random>
 
