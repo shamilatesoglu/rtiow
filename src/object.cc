@@ -1,17 +1,15 @@
 #include "object.h"
 
-bool sphere::hit(const ray& r,
-                 REAL_T t_min,
-                 REAL_T t_max,
-                 hit_record& rec) const {
+bool sphere::hit(const ray &r, REAL_T t_min, REAL_T t_max,
+                 hit_record &rec) const {
   // Ray Center: R
   // Sphere Center: S
   // Day Direction: d
   // Ray Eq: R(t) = R + td
   // ((t^2)d ⋅ d) + (2td ⋅ (R−S)) + ((R−S) ⋅ (R−S)) − r^2 = 0
-  auto const& R = r.origin();
-  auto const& S = center;
-  auto const& d = r.direction();
+  auto const &R = r.origin();
+  auto const &S = center;
+  auto const &d = r.direction();
   // D: From sphere center to ray origin
   auto SR = R - S;
   // At^2 + Bt + C = 0, solve for t
@@ -28,6 +26,7 @@ bool sphere::hit(const ray& r,
   }
   rec.t = t;
   rec.p = r.at(t);
-  rec.normal = unit_vector(rec.p - center);
+  vec3 outward_normal = (rec.p - S) / radius;
+  rec.set_face_normal(r, outward_normal);
   return true;
 }

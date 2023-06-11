@@ -1,4 +1,5 @@
 build
 ninja_build
+xcode_build
 compile_commands.json
 .cache
