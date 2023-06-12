@@ -1,5 +1,8 @@
 #include <iostream>
 
+#define RAYGUI_IMPLEMENTATION
+#include <raygui.h>
+
 #include "raylib.h"
 
 #include "camera.h"
@@ -49,7 +52,7 @@ struct ray_tracer {
       REAL_T up = u + random_real() * pixel_width;
       REAL_T vp = v + random_real() * pixel_height;
       color sample_color;
-      ray r = camera.get_ray(u, v);
+      ray r = camera.ray_to(u, v);
       fire_ray(r, sample_color, max_depth);
       c += sample_color;
     }
@@ -119,7 +122,7 @@ int main(void) {
   auto plane_mat = std::make_shared<lambertian>(color(0.5, 0.5, 0.5));
 
   camera cam(90, aspect_ratio);
-  ray_tracer tracer(cam, 4, 50, image_width, image_height);
+  ray_tracer tracer(cam, 4, 20, image_width, image_height);
   tracer.add_object(
       std::make_shared<plane>(point3(0, -0.5, 0), vec3(0, 1, 0), plane_mat));
   tracer.add_object(
@@ -130,12 +133,14 @@ int main(void) {
 
   std::vector<color> color_map(image_height * image_width);
   std::atomic_bool done = false;
-  auto t = std::thread([&]() {
+  std::atomic<REAL_T> s = 0;
+  auto t = std::jthread([&done, &pool, &image_height, &tracer, &color_map,
+                         &s]() {
     while (!done) {
       stopwatch sw;
       size_t segments = pool.pool_size();
       for (size_t i = 0; i < segments; ++i) {
-        pool.enqueue([&, i]() {
+        pool.enqueue([&image_height, &segments, &tracer, &color_map, i]() {
           for (size_t j = i; j < image_height * image_width; j += segments) {
             size_t x = j % image_width;
             size_t y = j / image_width;
@@ -148,32 +153,33 @@ int main(void) {
         });
       }
       pool.wait();
-      // std::cout << "\rElapsed time: " << sw.elapsed_str() << std::flush;
+      s = sw.elapsed();
     }
   });
 
   while (!WindowShouldClose()) {
-    vec3 move_dir(0, 0, 0);
+    BeginDrawing();
+
+    REAL_T move_right = 0;
+    REAL_T move_front = 0;
     if (IsKeyDown(KEY_W))
-      move_dir += vec3(0, 0, 1);
+      move_front += 1;
     if (IsKeyDown(KEY_S))
-      move_dir += vec3(0, 0, -1);
+      move_front -= 1;
     if (IsKeyDown(KEY_A))
-      move_dir += vec3(-1, 0, 0);
+      move_right -= 1;
     if (IsKeyDown(KEY_D))
-      move_dir += vec3(1, 0, 0);
+      move_right += 1;
     REAL_T move_speed = 0.1;
-    cam.move(move_dir, move_speed);
+    cam.move(move_right * move_speed, move_front * move_speed);
 
     if (IsMouseButtonDown(MOUSE_LEFT_BUTTON)) {
       auto delta = GetMouseDelta();
-      REAL_T dx = delta.x / image_width;
-      REAL_T dy = delta.y / image_height;
-
+      REAL_T dx = delta.x / image_width * 2;
+      REAL_T dy = delta.y / image_height * 2;
+      cam.change_direction(dx, dy);
     }
 
-
-    BeginDrawing();
     ClearBackground(BLACK);
     for (int j = 0; j < image_height; ++j) {
       for (int i = 0; i < image_width; ++i) {
@@ -181,12 +187,13 @@ int main(void) {
         draw_pixel(i, j, c);
       }
     }
+    REAL_T fps = 1.0 / s.load();
+    GuiLabel(Rectangle{0, 0, 100, 20}, std::format("{:.2f} FPS", fps).c_str());
     EndDrawing();
     std::this_thread::sleep_for(std::chrono::milliseconds(10));
   }
 
   done = true;
-  t.join();
 
   CloseWindow();
   return 0;

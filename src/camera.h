@@ -8,36 +8,45 @@ class camera {
     auto theta = deg2rad(hfov);
     viewport_width = 2.0 * tan(theta / 2);
     viewport_height = viewport_width / aspect_ratio;
-    update();
   }
 
-  ray get_ray(REAL_T u, REAL_T v) const {
-    return ray(origin,
-               lower_left_corner + u * horizontal + v * vertical - origin);
+  ray ray_to(REAL_T u, REAL_T v) const {
+    REAL_T half_width = viewport_width / 2.0;
+    REAL_T half_height = viewport_height / 2.0;
+    REAL_T x = (u * viewport_width) - half_width;
+    REAL_T y = (v * viewport_height) - half_height;
+
+    vec3 direction = (right() * x + up() * y + front).normalized();
+    return ray(origin, direction);
   }
 
-  void look_at(const point3& target) {
-    front = (target - origin).normalized();
-    update();
+  vec3 right() const { return front.cross(world_up).normalized(); }
+  vec3 up() const { return right().cross(front).normalized(); }
+
+  void look_at(const point3& target) { front = (target - origin).normalized(); }
+
+  void move_forward(REAL_T distance) { origin += front * distance; }
+  void move_right(REAL_T distance) { origin += right() * distance; }
+  void move(REAL_T right, REAL_T forward) {
+    move_right(right);
+    move_forward(forward);
+  }
+  
+  void change_direction(REAL_T du, REAL_T dv) {
+    REAL_T theta = atan2(front.x(), front.z());
+    REAL_T phi = atan2(front.y(), sqrt(front.x() * front.x() + front.z() * front.z()));
+    theta += du;
+    phi += dv;
+    if (phi > M_PI / 2.0 - 0.01) phi = M_PI / 2.0 - 0.01;
+    if (phi < -M_PI / 2.0 + 0.01) phi = -M_PI / 2.0 + 0.01;
+    front = vec3(sin(theta) * cos(phi), sin(phi), cos(theta) * cos(phi)).normalized();
   }
 
-  void move(vec3 direction, REAL_T distance) { origin += distance * direction; }
-
-  point3 origin = point3(0, 0, 0);
-  vec3 front;
-
-  void update() {
-    auto focal_length = 1.0;
-    horizontal = vec3(viewport_width, 0.0, 0.0);
-    vertical = vec3(0.0, viewport_height, 0.0);
-    lower_left_corner =
-        origin - horizontal / 2 - vertical / 2 - vec3(0, 0, focal_length);
-  }
+  point3 origin = point3(0.0, 0.0, 0.0);
+  vec3 front = vec3(0.0, 0.0, -1.0);
+  vec3 world_up = vec3(0.0, 1.0, 0.0);
 
  protected:
   REAL_T viewport_height;
   REAL_T viewport_width;
-  point3 lower_left_corner;
-  vec3 horizontal;
-  vec3 vertical;
 };
