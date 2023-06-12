@@ -13,12 +13,10 @@
 
 #include "stopwatch.h"
 
-color real_to_screen(const color& c) {
-  return 255.999 * c;
-}
+color real_to_screen(const color &c) { return 255.999 * c; }
 
 // c: Color in [0, 1]
-void draw_pixel(int x, int y, const color& c) {
+void draw_pixel(int x, int y, const color &c) {
   auto sc = real_to_screen(c);
   auto ir = static_cast<uint8_t>(sc.x());
   auto ig = static_cast<uint8_t>(sc.y());
@@ -27,16 +25,10 @@ void draw_pixel(int x, int y, const color& c) {
 }
 
 struct ray_tracer {
-  ray_tracer(const class camera& cam,
-             uint8_t multi_sample_count,
-             size_t max_depth,
-             size_t image_width,
-             size_t image_height)
-      : multi_sample_count(multi_sample_count),
-        max_depth(max_depth),
-        camera(cam),
-        image_width(image_width),
-        image_height(image_height) {
+  ray_tracer(const class camera &cam, size_t sample_count, size_t max_depth,
+             size_t image_width, size_t image_height)
+      : sample_count(sample_count), max_depth(max_depth), camera(cam),
+        image_width(image_width), image_height(image_height) {
     pixel_width = 1.0 / image_width;
     pixel_height = 1.0 / image_height;
   }
@@ -48,7 +40,7 @@ struct ray_tracer {
 
   color compute(REAL_T u, REAL_T v) {
     color c;
-    for (int i = 0; i < multi_sample_count; ++i) {
+    for (int i = 0; i < sample_count; ++i) {
       REAL_T up = u + random_real() * pixel_width;
       REAL_T vp = v + random_real() * pixel_height;
       color sample_color;
@@ -56,17 +48,20 @@ struct ray_tracer {
       fire_ray(r, sample_color, max_depth);
       c += sample_color;
     }
-    return c / multi_sample_count;
+    return c / sample_count;
   }
 
-  color background_color(const ray& r) {
+  color background_color(const ray &r) {
     vec3 unit_direction = r.direction().normalized();
     auto t = 0.5 * (unit_direction.y() + 1.0);
     return (1.0 - t) * color(1.0, 1.0, 1.0) + t * color(0.5, 0.7, 1.0);
   }
 
- protected:
-  void fire_ray(const ray& r, color& c, size_t depth) {
+  size_t sample_count;
+  size_t max_depth;
+
+protected:
+  void fire_ray(const ray &r, color &c, size_t depth) {
     if (depth <= 0) {
       c = color(0, 0, 0);
       return;
@@ -86,11 +81,11 @@ struct ray_tracer {
     }
   }
 
-  bool hit(const ray& r, REAL_T t_min, REAL_T t_max, hit_record& rec) const {
+  bool hit(const ray &r, REAL_T t_min, REAL_T t_max, hit_record &rec) const {
     hit_record temp_rec;
     bool hit_anything = false;
     auto closest_so_far = t_max;
-    for (const auto& obj : objects) {
+    for (const auto &obj : objects) {
       if (obj->hit(r, t_min, closest_so_far, temp_rec)) {
         hit_anything = true;
         closest_so_far = temp_rec.t;
@@ -100,9 +95,7 @@ struct ray_tracer {
     return hit_anything;
   }
 
-  uint8_t multi_sample_count;
-  size_t max_depth;
-  const camera& camera;
+  const camera &camera;
   size_t image_width;
   size_t image_height;
   REAL_T pixel_width;
@@ -118,17 +111,18 @@ int main(void) {
 
   InitWindow(image_width, image_height, "RTIOW");
 
-  auto diffuse_mat = std::make_shared<lambertian>(color(0.9, 0.5, 0.5));
+  auto red_mat = std::make_shared<lambertian>(color(0.9, 0.5, 0.5));
   auto plane_mat = std::make_shared<lambertian>(color(0.5, 0.5, 0.5));
+  auto metal_mat = std::make_shared<metal>(color(0.8, 0.8, 0.8), 0.0);
 
   camera cam(90, aspect_ratio);
   ray_tracer tracer(cam, 4, 20, image_width, image_height);
   tracer.add_object(
       std::make_shared<plane>(point3(0, -0.5, 0), vec3(0, 1, 0), plane_mat));
+  tracer.add_object(std::make_shared<sphere>(point3(0, 0, -2), 0.5, red_mat));
   tracer.add_object(
-      std::make_shared<sphere>(point3(0, 0, -5), 0.5, diffuse_mat));
-  tracer.add_object(
-      std::make_shared<sphere>(point3(1.2, 0, -5), 0.2, diffuse_mat));
+      std::make_shared<sphere>(point3(-1.2, 0, -2), 0.5, metal_mat));
+  tracer.add_object(std::make_shared<sphere>(point3(1.2, 0, -2), 0.2, red_mat));
   thread_pool pool(32);
 
   std::vector<color> color_map(image_height * image_width);
@@ -157,38 +151,51 @@ int main(void) {
     }
   });
 
+  bool lock_cam = true;
+
   while (!WindowShouldClose()) {
     BeginDrawing();
 
-    REAL_T move_right = 0;
-    REAL_T move_front = 0;
-    if (IsKeyDown(KEY_W))
-      move_front += 1;
-    if (IsKeyDown(KEY_S))
-      move_front -= 1;
-    if (IsKeyDown(KEY_A))
-      move_right -= 1;
-    if (IsKeyDown(KEY_D))
-      move_right += 1;
-    REAL_T move_speed = 0.1;
-    cam.move(move_right * move_speed, move_front * move_speed);
+    if (!lock_cam) {
+      REAL_T move_right = 0;
+      REAL_T move_front = 0;
+      if (IsKeyDown(KEY_W))
+        move_front += 1;
+      if (IsKeyDown(KEY_S))
+        move_front -= 1;
+      if (IsKeyDown(KEY_A))
+        move_right -= 1;
+      if (IsKeyDown(KEY_D))
+        move_right += 1;
+      REAL_T move_speed = 0.1;
+      cam.move(move_right * move_speed, move_front * move_speed);
 
-    if (IsMouseButtonDown(MOUSE_LEFT_BUTTON)) {
-      auto delta = GetMouseDelta();
-      REAL_T dx = delta.x / image_width * 2;
-      REAL_T dy = delta.y / image_height * 2;
-      cam.change_direction(dx, dy);
+      if (IsMouseButtonDown(MOUSE_LEFT_BUTTON)) {
+        auto delta = GetMouseDelta();
+        REAL_T dx = delta.x / image_width * 2;
+        REAL_T dy = delta.y / image_height * 2;
+        cam.change_direction(dx, dy);
+      }
     }
 
     ClearBackground(BLACK);
     for (int j = 0; j < image_height; ++j) {
       for (int i = 0; i < image_width; ++i) {
-        auto const& c = color_map[j * image_width + i];
+        auto const &c = color_map[j * image_width + i];
         draw_pixel(i, j, c);
       }
     }
     REAL_T fps = 1.0 / s.load();
     GuiLabel(Rectangle{0, 0, 100, 20}, std::format("{:.2f} FPS", fps).c_str());
+
+    // Sample count and max depth sliders
+    GuiCheckBox(Rectangle{0, 60, 20, 20}, "Lock camera", &lock_cam);
+    float sample_count = static_cast<float>(tracer.sample_count);
+    float max_depth = static_cast<float>(tracer.max_depth);
+    GuiSlider(Rectangle{0, 20, 100, 20}, nullptr, TextFormat("Samples %i", int(sample_count)), &sample_count, 1, 1000);
+    GuiSlider(Rectangle{0, 40, 100, 20}, nullptr, TextFormat("Max Depth %i", int(max_depth)), &max_depth, 1, 100);
+    tracer.sample_count = static_cast<size_t>(sample_count);
+    tracer.max_depth = static_cast<size_t>(max_depth);
     EndDrawing();
     std::this_thread::sleep_for(std::chrono::milliseconds(10));
   }

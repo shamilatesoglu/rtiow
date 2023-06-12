@@ -9,14 +9,25 @@ struct material {
                        ray& scattered) const = 0;
 };
 
-class lambertian : public material {
-    public:
-        lambertian(const color& a) : albedo(a) {}
+struct lambertian : public material {
+  lambertian(const color& a) : albedo(a) {}
 
-        virtual bool scatter(
-            const ray& r_in, const hit_record& rec, color& attenuation, ray& scattered
-        ) const override;
+  virtual bool scatter(const ray& r_in,
+                       const hit_record& rec,
+                       color& attenuation,
+                       ray& scattered) const override;
 
-    public:
-        color albedo;
+  color albedo;
+};
+
+struct metal : public material {
+  metal(const color& a, REAL_T f) : albedo(a), fuzz(f < 1 ? f : 1) {}
+
+  virtual bool scatter(const ray& r_in,
+                       const hit_record& rec,
+                       color& attenuation,
+                       ray& scattered) const override;
+
+  color albedo;
+  REAL_T fuzz;
 };

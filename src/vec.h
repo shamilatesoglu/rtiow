@@ -105,7 +105,13 @@ inline std::ostream& operator<<(std::ostream& out, const vec3& v) {
   return out << v.e[0] << ' ' << v.e[1] << ' ' << v.e[2];
 }
 
-inline vec3 operator*(REAL_T t, const vec3& v) { return v * t; }
+inline vec3 operator*(REAL_T t, const vec3& v) {
+  return v * t;
+}
+
+inline vec3 reflect(const vec3& in, const vec3& normal) {
+  return in - 2 * in.dot(normal) * normal;
+}
 
 using point3 = vec3;  // 3D point
 using color = vec3;   // RGB color
