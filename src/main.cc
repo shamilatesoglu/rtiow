@@ -128,7 +128,7 @@ int main(void) {
   std::vector<color> color_map(image_height * image_width);
   std::atomic_bool done = false;
   std::atomic<REAL_T> s = 0;
-  auto t = std::jthread([&done, &pool, &image_height, &tracer, &color_map,
+  auto t = std::thread([&done, &pool, &image_height, &tracer, &color_map,
                          &s]() {
     while (!done) {
       stopwatch sw;
@@ -186,7 +186,9 @@ int main(void) {
       }
     }
     REAL_T fps = 1.0 / s.load();
-    GuiLabel(Rectangle{0, 0, 100, 20}, std::format("{:.2f} FPS", fps).c_str());
+    char fps_str[32];
+    snprintf(fps_str, 32, "%.2f FPS", fps);
+    GuiLabel(Rectangle{0, 0, 100, 20}, fps_str);
 
     // Sample count and max depth sliders
     GuiCheckBox(Rectangle{0, 60, 20, 20}, "Lock camera", &lock_cam);
@@ -201,6 +203,7 @@ int main(void) {
   }
 
   done = true;
+  t.join();
 
   CloseWindow();
   return 0;
