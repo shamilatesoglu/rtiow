@@ -10,10 +10,12 @@
 
 #include "stopwatch.h"
 
-color real_to_screen(const color &c) { return 255.999 * c; }
+color real_to_screen(const color& c) {
+  return 255.999 * c;
+}
 
 // c: Color in [0, 1]
-void draw_pixel(int x, int y, const color &c) {
+void draw_pixel(int x, int y, const color& c) {
   auto sc = real_to_screen(c);
   auto ir = static_cast<uint8_t>(sc.x());
   auto ig = static_cast<uint8_t>(sc.y());
@@ -22,10 +24,16 @@ void draw_pixel(int x, int y, const color &c) {
 }
 
 struct ray_tracer {
-  ray_tracer(const class camera &cam, uint8_t multi_sample_count,
-             size_t max_depth, size_t image_width, size_t image_height)
-      : multi_sample_count(multi_sample_count), max_depth(max_depth),
-        camera(cam), image_width(image_width), image_height(image_height) {
+  ray_tracer(const class camera& cam,
+             uint8_t multi_sample_count,
+             size_t max_depth,
+             size_t image_width,
+             size_t image_height)
+      : multi_sample_count(multi_sample_count),
+        max_depth(max_depth),
+        camera(cam),
+        image_width(image_width),
+        image_height(image_height) {
     pixel_width = 1.0 / image_width;
     pixel_height = 1.0 / image_height;
   }
@@ -48,14 +56,14 @@ struct ray_tracer {
     return c / multi_sample_count;
   }
 
-  color background_color(const ray &r) {
-    vec3 unit_direction = unit_vector(r.direction());
+  color background_color(const ray& r) {
+    vec3 unit_direction = r.direction().normalized();
     auto t = 0.5 * (unit_direction.y() + 1.0);
     return (1.0 - t) * color(1.0, 1.0, 1.0) + t * color(0.5, 0.7, 1.0);
   }
 
-protected:
-  void fire_ray(const ray &r, color &c, size_t depth) {
+ protected:
+  void fire_ray(const ray& r, color& c, size_t depth) {
     if (depth <= 0) {
       c = color(0, 0, 0);
       return;
@@ -75,11 +83,11 @@ protected:
     }
   }
 
-  bool hit(const ray &r, REAL_T t_min, REAL_T t_max, hit_record &rec) const {
+  bool hit(const ray& r, REAL_T t_min, REAL_T t_max, hit_record& rec) const {
     hit_record temp_rec;
     bool hit_anything = false;
     auto closest_so_far = t_max;
-    for (const auto &obj : objects) {
+    for (const auto& obj : objects) {
       if (obj->hit(r, t_min, closest_so_far, temp_rec)) {
         hit_anything = true;
         closest_so_far = temp_rec.t;
@@ -91,7 +99,7 @@ protected:
 
   uint8_t multi_sample_count;
   size_t max_depth;
-  const camera &camera;
+  const camera& camera;
   size_t image_width;
   size_t image_height;
   REAL_T pixel_width;
@@ -118,7 +126,7 @@ int main(void) {
       std::make_shared<sphere>(point3(0, 0, -5), 0.5, diffuse_mat));
   tracer.add_object(
       std::make_shared<sphere>(point3(1.2, 0, -5), 0.2, diffuse_mat));
-  thread_pool pool(8);
+  thread_pool pool(32);
 
   std::vector<color> color_map(image_height * image_width);
   std::atomic_bool done = false;
@@ -140,16 +148,36 @@ int main(void) {
         });
       }
       pool.wait();
-      std::cout << "\rElapsed time: " << sw.elapsed_str() << std::flush;
+      // std::cout << "\rElapsed time: " << sw.elapsed_str() << std::flush;
     }
   });
 
   while (!WindowShouldClose()) {
+    vec3 move_dir(0, 0, 0);
+    if (IsKeyDown(KEY_W))
+      move_dir += vec3(0, 0, 1);
+    if (IsKeyDown(KEY_S))
+      move_dir += vec3(0, 0, -1);
+    if (IsKeyDown(KEY_A))
+      move_dir += vec3(-1, 0, 0);
+    if (IsKeyDown(KEY_D))
+      move_dir += vec3(1, 0, 0);
+    REAL_T move_speed = 0.1;
+    cam.move(move_dir, move_speed);
+
+    if (IsMouseButtonDown(MOUSE_LEFT_BUTTON)) {
+      auto delta = GetMouseDelta();
+      REAL_T dx = delta.x / image_width;
+      REAL_T dy = delta.y / image_height;
+
+    }
+
+
     BeginDrawing();
     ClearBackground(BLACK);
     for (int j = 0; j < image_height; ++j) {
       for (int i = 0; i < image_width; ++i) {
-        auto const &c = color_map[j * image_width + i];
+        auto const& c = color_map[j * image_width + i];
         draw_pixel(i, j, c);
       }
     }
