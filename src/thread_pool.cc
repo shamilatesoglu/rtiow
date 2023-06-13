@@ -37,6 +37,14 @@ void thread_pool::stop() {
   tasks_cond.notify_all();
 }
 
+void thread_pool::cancel() {
+  std::unique_lock lock(tasks_mutex);
+  tasks = {};
+  task_count = 0;
+  tasks_cond.notify_all();
+  wait_cond.notify_all();
+}
+
 void thread_pool::worker(uint32_t thread_id) {
   while (running) {
     std::function<void()> task;

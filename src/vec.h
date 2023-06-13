@@ -113,5 +113,12 @@ inline vec3 reflect(const vec3& in, const vec3& normal) {
   return in - 2 * in.dot(normal) * normal;
 }
 
+inline vec3 refract(const vec3& in, const vec3& normal, REAL_T etai_over_etat) {
+  REAL_T cos_theta = fmin(-in.dot(normal), 1.0);
+  vec3 r_out_perp = etai_over_etat * (in + cos_theta * normal);
+  vec3 r_out_parallel = -sqrt(fabs(1.0 - r_out_perp.length_squared())) * normal;
+  return r_out_perp + r_out_parallel;
+}
+
 using point3 = vec3;  // 3D point
 using color = vec3;   // RGB color

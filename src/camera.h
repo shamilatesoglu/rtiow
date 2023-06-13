@@ -20,7 +20,7 @@ class camera {
     return ray(origin, direction);
   }
 
-  vec3 right() const { return front.cross(world_up).normalized(); }
+  vec3 right() const { return front.cross(view_up).normalized(); }
   vec3 up() const { return right().cross(front).normalized(); }
 
   void look_at(const point3& target) { front = (target - origin).normalized(); }
@@ -42,9 +42,9 @@ class camera {
     front = vec3(sin(theta) * cos(phi), sin(phi), cos(theta) * cos(phi)).normalized();
   }
 
-  point3 origin = point3(0.0, 0.0, 0.0);
+  point3 origin = point3(0.0, 0.5, 0.0);
   vec3 front = vec3(0.0, 0.0, -1.0);
-  vec3 world_up = vec3(0.0, 1.0, 0.0);
+  vec3 view_up = vec3(0.0, 1.0, 0.0);
 
  protected:
   REAL_T viewport_height;

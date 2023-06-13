@@ -21,6 +21,8 @@ public:
 
   size_t pool_size() const { return threads.size(); }
 
+  void cancel();
+
 protected:
   void worker(uint32_t thread_id);
 

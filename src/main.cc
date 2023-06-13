@@ -15,13 +15,18 @@
 
 color real_to_screen(const color &c) { return 255.999 * c; }
 
-// c: Color in [0, 1]
-void draw_pixel(int x, int y, const color &c) {
+color read_pixel(const Image &image, int x, int y) {
+  Color c = GetImageColor(image, x, y);
+  return color(c.r, c.g, c.b) / 255.999;
+}
+
+void write_pixel(Image &image, int x, int y, const color &c) {
   auto sc = real_to_screen(c);
   auto ir = static_cast<uint8_t>(sc.x());
   auto ig = static_cast<uint8_t>(sc.y());
   auto ib = static_cast<uint8_t>(sc.z());
-  DrawPixel(x, y, Color{ir, ig, ib, 255});
+  Color color = {ir, ig, ib, 255};
+  ImageDrawPixel(&image, x, y, color);
 }
 
 struct ray_tracer {
@@ -44,7 +49,7 @@ struct ray_tracer {
       REAL_T up = u + random_real() * pixel_width;
       REAL_T vp = v + random_real() * pixel_height;
       color sample_color;
-      ray r = camera.ray_to(u, v);
+      ray r = camera.ray_to(up, vp);
       fire_ray(r, sample_color, max_depth);
       c += sample_color;
     }
@@ -103,57 +108,111 @@ protected:
   std::vector<std::shared_ptr<hittable>> objects;
 };
 
-int main(void) {
+void randomly_place_spheres(ray_tracer &tracer, size_t count) {
+  enum class material_type { LAMBERTIAN, METAL, GLASS };
+  for (size_t i = 0; i < count; ++i) {
+    auto radius = random_real(0.05, 0.5);
+    auto center = vec3(random_real(-10, 10), radius, random_real(-10, 10));
+    auto type = static_cast<material_type>(random_int(0, 2));
+    std::shared_ptr<material> mat;
+    switch (type) {
+    case material_type::LAMBERTIAN:
+      mat = std::make_shared<lambertian>(
+          color(random_real(), random_real(), random_real()));
+      break;
+    case material_type::METAL:
+      mat = std::make_shared<metal>(
+          color(random_real(), random_real(), random_real()),
+          random_real(0, 1));
+      break;
+    case material_type::GLASS:
+      mat = std::make_shared<glass>(
+          color(random_real(), random_real(), random_real()),
+          random_real(1.0, 2.5));
+      break;
+    }
+    tracer.add_object(std::make_shared<sphere>(center, radius, mat));
+  }
+}
+
+int main(int argc, char **argv) {
+  uint32_t thread_count = 32;
+  size_t image_width = 800;
+  size_t image_height = 450;
+  size_t accum_frames = 0;
+
+  for (int i = 1; i < argc; ++i) {
+    if (strcmp(argv[i], "--thread-count") == 0) {
+      thread_count = atoi(argv[++i]);
+    } else if (strcmp(argv[i], "--width") == 0) {
+      image_width = atoi(argv[++i]);
+    } else if (strcmp(argv[i], "--height") == 0) {
+      image_height = atoi(argv[++i]);
+    }
+  }
+
   // Image
-  const auto aspect_ratio = 16.0 / 9.0;
-  const size_t image_width = 800;
-  const size_t image_height = static_cast<size_t>(image_width / aspect_ratio);
+  const auto aspect_ratio = static_cast<REAL_T>(image_width) / image_height;
 
   InitWindow(image_width, image_height, "RTIOW");
 
-  auto red_mat = std::make_shared<lambertian>(color(0.9, 0.5, 0.5));
   auto plane_mat = std::make_shared<lambertian>(color(0.5, 0.5, 0.5));
-  auto metal_mat = std::make_shared<metal>(color(0.8, 0.8, 0.8), 0.0);
 
   camera cam(90, aspect_ratio);
   ray_tracer tracer(cam, 4, 20, image_width, image_height);
   tracer.add_object(
-      std::make_shared<plane>(point3(0, -0.5, 0), vec3(0, 1, 0), plane_mat));
-  tracer.add_object(std::make_shared<sphere>(point3(0, 0, -2), 0.5, red_mat));
-  tracer.add_object(
-      std::make_shared<sphere>(point3(-1.2, 0, -2), 0.5, metal_mat));
-  tracer.add_object(std::make_shared<sphere>(point3(1.2, 0, -2), 0.2, red_mat));
-  thread_pool pool(32);
+      std::make_shared<plane>(point3(0, 0, 0), vec3(0, 1, 0), plane_mat));
+  randomly_place_spheres(tracer, 100);
 
-  std::vector<color> color_map(image_height * image_width);
-  std::atomic_bool done = false;
-  std::atomic<REAL_T> s = 0;
-  auto t = std::thread([&done, &pool, &image_height, &tracer, &color_map,
-                         &s]() {
+  thread_pool pool(thread_count);
+
+  Image image = LoadImageFromScreen();
+  Texture2D tex = LoadTextureFromImage(image);
+
+  bool done = false;
+  REAL_T frame_time = 0;
+  std::atomic_uint progress = 0;
+  auto t = std::thread([&done, &pool, &tracer, &image, &frame_time, &progress,
+                        &accum_frames]() {
     while (!done) {
       stopwatch sw;
+      progress.store(0);
       size_t segments = pool.pool_size();
       for (size_t i = 0; i < segments; ++i) {
-        pool.enqueue([&image_height, &segments, &tracer, &color_map, i]() {
-          for (size_t j = i; j < image_height * image_width; j += segments) {
-            size_t x = j % image_width;
-            size_t y = j / image_width;
-            REAL_T u = static_cast<REAL_T>(x) / (image_width - 1);
-            REAL_T v = static_cast<REAL_T>(y) / (image_height - 1);
+        pool.enqueue([&image, &segments, &progress, &tracer, &accum_frames,
+                      i]() {
+          for (size_t j = i; j < image.height * image.width; j += segments) {
+            size_t x = j % image.width;
+            size_t y = j / image.width;
+            REAL_T u = static_cast<REAL_T>(x) / (image.width - 1);
+            REAL_T v = static_cast<REAL_T>(y) / (image.height - 1);
             v = 1.0 - v;
             auto c = tracer.compute(u, v);
-            color_map[j] = c;
+            if (accum_frames == 0) {
+              write_pixel(image, x, y, c);
+            } else {
+              auto color = read_pixel(image, x, y);
+              color = color * (accum_frames / (accum_frames + 1.0)) +
+                      c * (1.0 / (accum_frames + 1.0));
+              write_pixel(image, x, y, color);
+            }
+            progress.fetch_add(1, std::memory_order_relaxed);
           }
         });
       }
       pool.wait();
-      s = sw.elapsed();
+      frame_time = sw.elapsed();
     }
   });
 
   bool lock_cam = true;
 
+  REAL_T render_fps = 0;
+  char filename[256] = "render.png";
+  bool editing_filename = false;
+
   while (!WindowShouldClose()) {
+    stopwatch sw;
     BeginDrawing();
 
     if (!lock_cam) {
@@ -170,7 +229,7 @@ int main(void) {
       REAL_T move_speed = 0.1;
       cam.move(move_right * move_speed, move_front * move_speed);
 
-      if (IsMouseButtonDown(MOUSE_LEFT_BUTTON)) {
+      if (IsMouseButtonDown(MOUSE_RIGHT_BUTTON)) {
         auto delta = GetMouseDelta();
         REAL_T dx = delta.x / image_width * 2;
         REAL_T dy = delta.y / image_height * 2;
@@ -178,33 +237,72 @@ int main(void) {
       }
     }
 
-    ClearBackground(BLACK);
-    for (int j = 0; j < image_height; ++j) {
-      for (int i = 0; i < image_width; ++i) {
-        auto const &c = color_map[j * image_width + i];
-        draw_pixel(i, j, c);
-      }
-    }
-    REAL_T fps = 1.0 / s.load();
-    char fps_str[32];
-    snprintf(fps_str, 32, "%.2f FPS", fps);
-    GuiLabel(Rectangle{0, 0, 100, 20}, fps_str);
+    UpdateTexture(tex, image.data);
+    DrawTexture(tex, 0, 0, WHITE);
+
+    REAL_T fps = 1.0 / frame_time;
+    char fps_str[128];
+    snprintf(fps_str, sizeof(fps_str), "RT: %.2f FPS (%s)", fps, stopwatch::elapsed_str(frame_time).c_str());
+    GuiLabel(Rectangle{5, 0, 200, 20}, fps_str);
+    snprintf(fps_str, sizeof(fps_str), "Render: %.2f FPS", render_fps);
+    GuiLabel(Rectangle{5, 20, 150, 20}, fps_str);
 
     // Sample count and max depth sliders
-    GuiCheckBox(Rectangle{0, 60, 20, 20}, "Lock camera", &lock_cam);
     float sample_count = static_cast<float>(tracer.sample_count);
     float max_depth = static_cast<float>(tracer.max_depth);
-    GuiSlider(Rectangle{0, 20, 100, 20}, nullptr, TextFormat("Samples %i", int(sample_count)), &sample_count, 1, 1000);
-    GuiSlider(Rectangle{0, 40, 100, 20}, nullptr, TextFormat("Max Depth %i", int(max_depth)), &max_depth, 1, 100);
+    float accum_frames_f = static_cast<float>(accum_frames);
+    GuiSlider(Rectangle{5, 45, 150, 20}, nullptr,
+              TextFormat("Samples %i", int(sample_count)), &sample_count, 1,
+              1000);
+    GuiSlider(Rectangle{5, 70, 150, 20}, nullptr,
+              TextFormat("Max Depth %i", int(max_depth)), &max_depth, 1, 100);
+    GuiSlider(Rectangle{5, 95, 150, 20}, nullptr,
+              TextFormat("Accumulate %i Frames", int(accum_frames)),
+              &accum_frames_f, 0, 100);
+    GuiCheckBox(Rectangle{5, 120, 20, 20}, "Lock camera", &lock_cam);
     tracer.sample_count = static_cast<size_t>(sample_count);
     tracer.max_depth = static_cast<size_t>(max_depth);
+    accum_frames = static_cast<size_t>(accum_frames_f);
+    // Write to disk
+    Rectangle filename_textbox_bounds = {5, 135, 150, 20};
+    if (CheckCollisionPointRec(GetMousePosition(), filename_textbox_bounds) &&
+        IsMouseButtonPressed(MOUSE_LEFT_BUTTON)) {
+      editing_filename = true;
+    }
+    if (editing_filename &&
+        !CheckCollisionPointRec(GetMousePosition(), filename_textbox_bounds) &&
+        IsMouseButtonPressed(MOUSE_LEFT_BUTTON)) {
+      editing_filename = false;
+    }
+    GuiTextBox(Rectangle{5, 160, 150, 20}, filename, 256, editing_filename);
+    if (GuiButton(Rectangle{5, 185, 150, 20}, "Export")) {
+      ExportImage(image, filename);
+    }
+
+    // Reset image
+    if (GuiButton(Rectangle{5, 210, 150, 20}, "Reset")) {
+      pool.cancel();
+      for (size_t i = 0; i < image.width * image.height; ++i) {
+        write_pixel(image, i % image.width, i / image.width, color(0, 0, 0));
+      }
+    }
+
+    // Progress bar at the bottom
+    float progress_f = static_cast<float>(progress.load());
+    constexpr float progress_bar_thickness = 8.f;
+    GuiProgressBar(
+        Rectangle{0, image.height - progress_bar_thickness,
+                  static_cast<float>(image.width), progress_bar_thickness},
+        0, 0, &progress_f, 0, static_cast<float>(image.width * image.height));
     EndDrawing();
     std::this_thread::sleep_for(std::chrono::milliseconds(10));
+    render_fps = 1.0 / sw.elapsed();
   }
 
   done = true;
   t.join();
 
+  UnloadTexture(tex);
   CloseWindow();
   return 0;
 }
