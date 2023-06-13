@@ -113,7 +113,7 @@ void randomly_place_spheres(ray_tracer &tracer, size_t count) {
   std::vector<std::shared_ptr<sphere>> spheres;
   for (size_t i = 0; i < count;) {
     auto radius = random_real(0.05, 0.25);
-    auto center = vec3(random_real(-5, 5), radius, random_real(-5, 5));
+    auto center = vec3(random_real(-3, 3), radius, random_real(-3, 3));
     auto type = static_cast<material_type>(random_int(0, 2));
     std::shared_ptr<material> mat;
     switch (type) {
@@ -176,7 +176,7 @@ int main(int argc, char **argv) {
   ray_tracer tracer(cam, 4, 20, image_width, image_height);
   tracer.add_object(
       std::make_shared<plane>(point3(0, 0, 0), vec3(0, 1, 0), plane_mat));
-  randomly_place_spheres(tracer, 250);
+  randomly_place_spheres(tracer, 100);
 
   thread_pool pool(thread_count);
 
