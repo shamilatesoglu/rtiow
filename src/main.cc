@@ -192,7 +192,7 @@ int main(int argc, char **argv) {
       progress.store(0);
       size_t segments = pool.pool_size();
       for (size_t i = 0; i < segments; ++i) {
-        pool.enqueue([&image, &segments, &progress, &tracer, i]() {
+        pool.enqueue([&image, segments, &progress, &tracer, i]() {
           for (size_t j = i; j < image.height * image.width; j += segments) {
             size_t x = j % image.width;
             size_t y = j / image.width;
@@ -301,6 +301,7 @@ int main(int argc, char **argv) {
   }
 
   done = true;
+  pool.cancel();
   t.join();
 
   UnloadTexture(tex);

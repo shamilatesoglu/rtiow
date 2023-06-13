@@ -19,7 +19,7 @@ thread_pool::~thread_pool() {
   }
 }
 
-void thread_pool::enqueue(std::function<void()>&& task) {
+void thread_pool::enqueue(std::function<void()> &&task) {
   std::unique_lock lock(tasks_mutex);
   tasks.push(std::move(task));
   ++task_count;
@@ -37,14 +37,6 @@ void thread_pool::stop() {
   tasks_cond.notify_all();
 }
 
-void thread_pool::cancel() {
-  std::unique_lock lock(tasks_mutex);
-  tasks = {};
-  task_count = 0;
-  tasks_cond.notify_all();
-  wait_cond.notify_all();
-}
-
 void thread_pool::worker(uint32_t thread_id) {
   while (running) {
     std::function<void()> task;
@@ -58,9 +50,21 @@ void thread_pool::worker(uint32_t thread_id) {
       tasks.pop();
     }
     task();
-    --task_count;
+    if (task_count != 0) {
+      --task_count;
+    }
     if (task_count == 0) {
       wait_cond.notify_all();
     }
   }
+}
+
+void thread_pool::cancel()
+{
+  std::unique_lock lock(tasks_mutex);
+  while (!tasks.empty()) {
+    tasks.pop();
+  }
+  task_count = 0;
+  wait_cond.notify_all();
 }
