@@ -2,10 +2,8 @@
 
 #include "ray.h"
 
-bool lambertian::scatter(const ray& r_in,
-                         const hit_record& rec,
-                         color& attenuation,
-                         ray& scattered) const {
+bool lambertian::scatter(const ray &r_in, const hit_record &rec,
+                         color &attenuation, ray &scattered) const {
   auto scatter_direction = rec.normal + random_unit_vector();
   // Catch degenerate scatter direction
   if (scatter_direction.near_zero()) {
@@ -16,20 +14,16 @@ bool lambertian::scatter(const ray& r_in,
   return true;
 }
 
-bool metal::scatter(const ray& r_in,
-                    const hit_record& rec,
-                    color& attenuation,
-                    ray& scattered) const {
+bool metal::scatter(const ray &r_in, const hit_record &rec, color &attenuation,
+                    ray &scattered) const {
   vec3 reflected = reflect(r_in.direction().normalized(), rec.normal);
   scattered = ray(rec.p, reflected + fuzz * random_unit_vector());
   attenuation = albedo;
   return (scattered.direction().dot(rec.normal) > 0);
 }
 
-bool glass::scatter(const ray& r_in,
-                          const hit_record& rec,
-                          color& attenuation,
-                          ray& scattered) const {
+bool glass::scatter(const ray &r_in, const hit_record &rec, color &attenuation,
+                    ray &scattered) const {
   attenuation = albedo;
   REAL_T refraction_ratio = rec.front_face ? (1.0 / ior) : ior;
   vec3 unit_direction = r_in.direction().normalized();
@@ -39,7 +33,8 @@ bool glass::scatter(const ray& r_in,
   bool cannot_refract = refraction_ratio * sin_theta > 1.0;
   vec3 direction;
 
-  if (cannot_refract)
+  if (cannot_refract ||
+      reflectance(cos_theta, refraction_ratio) > random_real())
     direction = reflect(unit_direction, rec.normal);
   else
     direction = refract(unit_direction, rec.normal, refraction_ratio);

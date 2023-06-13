@@ -110,9 +110,10 @@ protected:
 
 void randomly_place_spheres(ray_tracer &tracer, size_t count) {
   enum class material_type { LAMBERTIAN, METAL, GLASS };
-  for (size_t i = 0; i < count; ++i) {
-    auto radius = random_real(0.05, 0.5);
-    auto center = vec3(random_real(-10, 10), radius, random_real(-10, 10));
+  std::vector<std::shared_ptr<sphere>> spheres;
+  for (size_t i = 0; i < count;) {
+    auto radius = random_real(0.05, 0.25);
+    auto center = vec3(random_real(-5, 5), radius, random_real(-5, 5));
     auto type = static_cast<material_type>(random_int(0, 2));
     std::shared_ptr<material> mat;
     switch (type) {
@@ -131,7 +132,21 @@ void randomly_place_spheres(ray_tracer &tracer, size_t count) {
           random_real(1.0, 2.5));
       break;
     }
-    tracer.add_object(std::make_shared<sphere>(center, radius, mat));
+    bool try_again = false;
+    for (const auto &s : spheres) {
+      if ((s->center - center).length() < s->radius + radius) {
+        try_again = true;
+        break;
+      }
+    }
+    if (try_again)
+      continue;
+    spheres.emplace_back(std::make_shared<sphere>(center, radius, mat));
+    ++i;
+  }
+
+  for (const auto &s : spheres) {
+    tracer.add_object(s);
   }
 }
 
@@ -139,7 +154,6 @@ int main(int argc, char **argv) {
   uint32_t thread_count = 32;
   size_t image_width = 800;
   size_t image_height = 450;
-  size_t accum_frames = 0;
 
   for (int i = 1; i < argc; ++i) {
     if (strcmp(argv[i], "--thread-count") == 0) {
@@ -162,7 +176,7 @@ int main(int argc, char **argv) {
   ray_tracer tracer(cam, 4, 20, image_width, image_height);
   tracer.add_object(
       std::make_shared<plane>(point3(0, 0, 0), vec3(0, 1, 0), plane_mat));
-  randomly_place_spheres(tracer, 100);
+  randomly_place_spheres(tracer, 250);
 
   thread_pool pool(thread_count);
 
@@ -172,15 +186,13 @@ int main(int argc, char **argv) {
   bool done = false;
   REAL_T frame_time = 0;
   std::atomic_uint progress = 0;
-  auto t = std::thread([&done, &pool, &tracer, &image, &frame_time, &progress,
-                        &accum_frames]() {
+  auto t = std::thread([&done, &pool, &tracer, &image, &frame_time, &progress]() {
     while (!done) {
       stopwatch sw;
       progress.store(0);
       size_t segments = pool.pool_size();
       for (size_t i = 0; i < segments; ++i) {
-        pool.enqueue([&image, &segments, &progress, &tracer, &accum_frames,
-                      i]() {
+        pool.enqueue([&image, &segments, &progress, &tracer, i]() {
           for (size_t j = i; j < image.height * image.width; j += segments) {
             size_t x = j % image.width;
             size_t y = j / image.width;
@@ -188,14 +200,7 @@ int main(int argc, char **argv) {
             REAL_T v = static_cast<REAL_T>(y) / (image.height - 1);
             v = 1.0 - v;
             auto c = tracer.compute(u, v);
-            if (accum_frames == 0) {
-              write_pixel(image, x, y, c);
-            } else {
-              auto color = read_pixel(image, x, y);
-              color = color * (accum_frames / (accum_frames + 1.0)) +
-                      c * (1.0 / (accum_frames + 1.0));
-              write_pixel(image, x, y, color);
-            }
+            write_pixel(image, x, y, c);
             progress.fetch_add(1, std::memory_order_relaxed);
           }
         });
@@ -242,7 +247,8 @@ int main(int argc, char **argv) {
 
     REAL_T fps = 1.0 / frame_time;
     char fps_str[128];
-    snprintf(fps_str, sizeof(fps_str), "RT: %.2f FPS (%s)", fps, stopwatch::elapsed_str(frame_time).c_str());
+    snprintf(fps_str, sizeof(fps_str), "RT: %.2f FPS (%s)", fps,
+             stopwatch::elapsed_str(frame_time).c_str());
     GuiLabel(Rectangle{5, 0, 200, 20}, fps_str);
     snprintf(fps_str, sizeof(fps_str), "Render: %.2f FPS", render_fps);
     GuiLabel(Rectangle{5, 20, 150, 20}, fps_str);
@@ -250,21 +256,16 @@ int main(int argc, char **argv) {
     // Sample count and max depth sliders
     float sample_count = static_cast<float>(tracer.sample_count);
     float max_depth = static_cast<float>(tracer.max_depth);
-    float accum_frames_f = static_cast<float>(accum_frames);
     GuiSlider(Rectangle{5, 45, 150, 20}, nullptr,
               TextFormat("Samples %i", int(sample_count)), &sample_count, 1,
               1000);
     GuiSlider(Rectangle{5, 70, 150, 20}, nullptr,
               TextFormat("Max Depth %i", int(max_depth)), &max_depth, 1, 100);
-    GuiSlider(Rectangle{5, 95, 150, 20}, nullptr,
-              TextFormat("Accumulate %i Frames", int(accum_frames)),
-              &accum_frames_f, 0, 100);
-    GuiCheckBox(Rectangle{5, 120, 20, 20}, "Lock camera", &lock_cam);
+    GuiCheckBox(Rectangle{5, 95, 20, 20}, "Lock camera", &lock_cam);
     tracer.sample_count = static_cast<size_t>(sample_count);
     tracer.max_depth = static_cast<size_t>(max_depth);
-    accum_frames = static_cast<size_t>(accum_frames_f);
     // Write to disk
-    Rectangle filename_textbox_bounds = {5, 135, 150, 20};
+    Rectangle filename_textbox_bounds = {5, 120, 150, 20};
     if (CheckCollisionPointRec(GetMousePosition(), filename_textbox_bounds) &&
         IsMouseButtonPressed(MOUSE_LEFT_BUTTON)) {
       editing_filename = true;
@@ -274,13 +275,13 @@ int main(int argc, char **argv) {
         IsMouseButtonPressed(MOUSE_LEFT_BUTTON)) {
       editing_filename = false;
     }
-    GuiTextBox(Rectangle{5, 160, 150, 20}, filename, 256, editing_filename);
-    if (GuiButton(Rectangle{5, 185, 150, 20}, "Export")) {
+    GuiTextBox(filename_textbox_bounds, filename, 256, editing_filename);
+    if (GuiButton(Rectangle{5, 145, 150, 20}, "Export")) {
       ExportImage(image, filename);
     }
 
     // Reset image
-    if (GuiButton(Rectangle{5, 210, 150, 20}, "Reset")) {
+    if (GuiButton(Rectangle{5, 170, 150, 20}, "Reset")) {
       pool.cancel();
       for (size_t i = 0; i < image.width * image.height; ++i) {
         write_pixel(image, i % image.width, i / image.width, color(0, 0, 0));
