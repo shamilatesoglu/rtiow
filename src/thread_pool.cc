@@ -4,22 +4,25 @@
 
 thread_pool::thread_pool(uint32_t num_threads) : running(false) {
   threads.resize(num_threads);
-  for (uint32_t i = 0; i < num_threads; ++i) {
-    threads[i] = std::thread(&thread_pool::worker, this, i);
-  }
-  running = true;
 }
 
 thread_pool::~thread_pool() {
   stop();
-  for (auto &thread : threads) {
+  for (auto& thread : threads) {
     if (thread.joinable()) {
       thread.join();
     }
   }
 }
 
-void thread_pool::enqueue(std::function<void()> &&task) {
+void thread_pool::start() {
+  running = true;
+  for (uint32_t i = 0; i < threads.size(); ++i) {
+    threads[i] = std::thread(&thread_pool::worker, this, i);
+  }
+}
+
+void thread_pool::enqueue(std::function<void()>&& task) {
   std::unique_lock lock(tasks_mutex);
   tasks.push(std::move(task));
   ++task_count;
@@ -59,8 +62,7 @@ void thread_pool::worker(uint32_t thread_id) {
   }
 }
 
-void thread_pool::cancel()
-{
+void thread_pool::cancel() {
   std::unique_lock lock(tasks_mutex);
   while (!tasks.empty()) {
     tasks.pop();

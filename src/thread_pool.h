@@ -13,6 +13,8 @@ public:
 
   ~thread_pool();
 
+  void start();
+
   void enqueue(std::function<void()>&& task);
 
   void wait();

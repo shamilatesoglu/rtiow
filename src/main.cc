@@ -3,24 +3,24 @@
 #define RAYGUI_IMPLEMENTATION
 #include <raygui.h>
 
-#include "raylib.h"
-
 #include "camera.h"
 #include "object.h"
 #include "ray.h"
+#include "raylib.h"
+#include "stopwatch.h"
 #include "thread_pool.h"
 #include "vec.h"
 
-#include "stopwatch.h"
+color real_to_screen(const color& c) {
+  return 255.999 * c;
+}
 
-color real_to_screen(const color &c) { return 255.999 * c; }
-
-color read_pixel(const Image &image, int x, int y) {
+color read_pixel(const Image& image, int x, int y) {
   Color c = GetImageColor(image, x, y);
   return color(c.r, c.g, c.b) / 255.999;
 }
 
-void write_pixel(Image &image, int x, int y, const color &c) {
+void write_pixel(Image& image, int x, int y, const color& c) {
   auto sc = real_to_screen(c);
   auto ir = static_cast<uint8_t>(sc.x());
   auto ig = static_cast<uint8_t>(sc.y());
@@ -30,10 +30,13 @@ void write_pixel(Image &image, int x, int y, const color &c) {
 }
 
 struct ray_tracer {
-  ray_tracer(const class camera &cam, size_t sample_count, size_t max_depth,
+  ray_tracer(const class camera& cam, size_t sample_count, size_t max_depth,
              size_t image_width, size_t image_height)
-      : sample_count(sample_count), max_depth(max_depth), camera(cam),
-        image_width(image_width), image_height(image_height) {
+      : sample_count(sample_count),
+        max_depth(max_depth),
+        camera(cam),
+        image_width(image_width),
+        image_height(image_height) {
     pixel_width = 1.0 / image_width;
     pixel_height = 1.0 / image_height;
   }
@@ -41,6 +44,7 @@ struct ray_tracer {
   void add_object(std::shared_ptr<hittable> obj) {
     objects.emplace_back(std::move(obj));
   }
+
   void clear_objects() { objects.clear(); }
 
   color compute(REAL_T u, REAL_T v) {
@@ -56,7 +60,7 @@ struct ray_tracer {
     return c / sample_count;
   }
 
-  color background_color(const ray &r) {
+  color background_color(const ray& r) {
     vec3 unit_direction = r.direction().normalized();
     auto t = 0.5 * (unit_direction.y() + 1.0);
     return (1.0 - t) * color(1.0, 1.0, 1.0) + t * color(0.5, 0.7, 1.0);
@@ -65,8 +69,8 @@ struct ray_tracer {
   size_t sample_count;
   size_t max_depth;
 
-protected:
-  void fire_ray(const ray &r, color &c, size_t depth) {
+ protected:
+  void fire_ray(const ray& r, color& c, size_t depth) {
     if (depth <= 0) {
       c = color(0, 0, 0);
       return;
@@ -77,7 +81,7 @@ protected:
       color attenuation;
       if (rec.mat->scatter(r, rec, attenuation, scattered)) {
         fire_ray(scattered, c, depth - 1);
-        c = c * attenuation;
+        c *= attenuation;
       } else {
         c = color(0, 0, 0);
       }
@@ -86,11 +90,11 @@ protected:
     }
   }
 
-  bool hit(const ray &r, REAL_T t_min, REAL_T t_max, hit_record &rec) const {
+  bool hit(const ray& r, REAL_T t_min, REAL_T t_max, hit_record& rec) const {
     hit_record temp_rec;
     bool hit_anything = false;
     auto closest_so_far = t_max;
-    for (const auto &obj : objects) {
+    for (const auto& obj : objects) {
       if (obj->hit(r, t_min, closest_so_far, temp_rec)) {
         hit_anything = true;
         closest_so_far = temp_rec.t;
@@ -100,7 +104,7 @@ protected:
     return hit_anything;
   }
 
-  const camera &camera;
+  const camera& camera;
   size_t image_width;
   size_t image_height;
   REAL_T pixel_width;
@@ -108,8 +112,12 @@ protected:
   std::vector<std::shared_ptr<hittable>> objects;
 };
 
-void randomly_place_spheres(ray_tracer &tracer, size_t count) {
-  enum class material_type { LAMBERTIAN, METAL, GLASS };
+void randomly_place_spheres(ray_tracer& tracer, size_t count) {
+  enum class material_type {
+    LAMBERTIAN,
+    METAL,
+    GLASS
+  };
   std::vector<std::shared_ptr<sphere>> spheres;
   for (size_t i = 0; i < count;) {
     auto radius = random_real(0.05, 0.25);
@@ -117,23 +125,23 @@ void randomly_place_spheres(ray_tracer &tracer, size_t count) {
     auto type = static_cast<material_type>(random_int(0, 2));
     std::shared_ptr<material> mat;
     switch (type) {
-    case material_type::LAMBERTIAN:
-      mat = std::make_shared<lambertian>(
+      case material_type::LAMBERTIAN:
+        mat = std::make_shared<lambertian>(
           color(random_real(), random_real(), random_real()));
-      break;
-    case material_type::METAL:
-      mat = std::make_shared<metal>(
+        break;
+      case material_type::METAL:
+        mat = std::make_shared<metal>(
           color(random_real(), random_real(), random_real()),
           random_real(0, 1));
-      break;
-    case material_type::GLASS:
-      mat = std::make_shared<glass>(
+        break;
+      case material_type::GLASS:
+        mat = std::make_shared<glass>(
           color(random_real(), random_real(), random_real()),
           random_real(1.0, 2.5));
-      break;
+        break;
     }
     bool try_again = false;
-    for (const auto &s : spheres) {
+    for (const auto& s : spheres) {
       if ((s->center - center).length() < s->radius + radius) {
         try_again = true;
         break;
@@ -145,12 +153,12 @@ void randomly_place_spheres(ray_tracer &tracer, size_t count) {
     ++i;
   }
 
-  for (const auto &s : spheres) {
+  for (const auto& s : spheres) {
     tracer.add_object(s);
   }
 }
 
-int main(int argc, char **argv) {
+int main(int argc, char** argv) {
   uint32_t thread_count = 32;
   size_t image_width = 800;
   size_t image_height = 450;
@@ -167,47 +175,62 @@ int main(int argc, char **argv) {
 
   // Image
   const auto aspect_ratio = static_cast<REAL_T>(image_width) / image_height;
+  const auto pixel_count = image_width * image_height;
 
   InitWindow(image_width, image_height, "RTIOW");
+
+  Image image = LoadImageFromScreen();
+  Texture2D tex = LoadTextureFromImage(image);
 
   auto plane_mat = std::make_shared<lambertian>(color(0.5, 0.5, 0.5));
 
   camera cam(90, aspect_ratio);
   ray_tracer tracer(cam, 4, 20, image_width, image_height);
   tracer.add_object(
-      std::make_shared<plane>(point3(0, 0, 0), vec3(0, 1, 0), plane_mat));
+    std::make_shared<plane>(point3(0, 0, 0), vec3(0, 1, 0), plane_mat));
   randomly_place_spheres(tracer, 100);
 
   thread_pool pool(thread_count);
 
-  Image image = LoadImageFromScreen();
-  Texture2D tex = LoadTextureFromImage(image);
-
   bool done = false;
-  REAL_T frame_time = 0;
+  REAL_T rt_frame_time = 0;
   std::atomic_uint progress = 0;
-  auto t = std::thread([&done, &pool, &tracer, &image, &frame_time, &progress]() {
-    while (!done) {
-      stopwatch sw;
-      progress.store(0);
-      size_t segments = pool.pool_size();
-      for (size_t i = 0; i < segments; ++i) {
-        pool.enqueue([&image, segments, &progress, &tracer, i]() {
-          for (size_t j = i; j < image.height * image.width; j += segments) {
-            size_t x = j % image.width;
-            size_t y = j / image.width;
-            REAL_T u = static_cast<REAL_T>(x) / (image.width - 1);
-            REAL_T v = static_cast<REAL_T>(y) / (image.height - 1);
-            v = 1.0 - v;
-            auto c = tracer.compute(u, v);
-            write_pixel(image, x, y, c);
-            progress.fetch_add(1, std::memory_order_relaxed);
+  stopwatch rt_sw;
+  auto rt_thread = std::thread([&done, &pool, &tracer, &image, &rt_frame_time,
+                                &progress, &rt_sw, &pixel_count]() {
+    const size_t segments = pool.pool_size();
+    const size_t seg_size = image.width / segments;
+    std::cout << "Segments: " << segments << std::endl;
+    std::cout << "Segment size: " << seg_size << std::endl;
+    for (size_t si = 0; si < segments; ++si) {
+      pool.enqueue([&image, si, seg_size, segments, &progress, &tracer, &done,
+                    &rt_frame_time, &rt_sw, &pixel_count]() {
+        const size_t start = si * seg_size;
+        const size_t end = si == segments - 1 ? image.width : start + seg_size;
+        char buf[256];
+        snprintf(buf, 256, "Segment %zu [%zu, %zu)\n", si, start, end);
+        std::cout << buf << std::flush;
+        while (!done) {
+          for (size_t i = start; i < end; ++i) {
+            for (size_t j = 0; j < image.height; ++j) {
+              REAL_T u = static_cast<REAL_T>(i) / (image.width - 1);
+              REAL_T v = static_cast<REAL_T>(j) / (image.height - 1);
+              v = 1.0 - v;
+              auto c = tracer.compute(u, v);
+              write_pixel(image, i, j, c);
+              if (progress.fetch_add(1, std::memory_order_relaxed) ==
+                  pixel_count - 1) {
+                rt_frame_time = rt_sw.elapsed();
+                progress.store(0);
+                rt_sw.reset();
+              }
+            }
           }
-        });
-      }
-      pool.wait();
-      frame_time = sw.elapsed();
+        }
+      });
     }
+    pool.start();
+    pool.wait();
   });
 
   bool lock_cam = true;
@@ -245,10 +268,10 @@ int main(int argc, char **argv) {
     UpdateTexture(tex, image.data);
     DrawTexture(tex, 0, 0, WHITE);
 
-    REAL_T fps = 1.0 / frame_time;
+    REAL_T rt_fps = 1.0 / rt_frame_time;
     char fps_str[128];
-    snprintf(fps_str, sizeof(fps_str), "RT: %.2f FPS (%s)", fps,
-             stopwatch::elapsed_str(frame_time).c_str());
+    snprintf(fps_str, sizeof(fps_str), "RT: %.2f FPS (%s)", rt_fps,
+             stopwatch::elapsed_str(rt_frame_time).c_str());
     GuiLabel(Rectangle{5, 0, 200, 20}, fps_str);
     snprintf(fps_str, sizeof(fps_str), "Render: %.2f FPS", render_fps);
     GuiLabel(Rectangle{5, 20, 150, 20}, fps_str);
@@ -292,9 +315,9 @@ int main(int argc, char **argv) {
     float progress_f = static_cast<float>(progress.load());
     constexpr float progress_bar_thickness = 8.f;
     GuiProgressBar(
-        Rectangle{0, image.height - progress_bar_thickness,
-                  static_cast<float>(image.width), progress_bar_thickness},
-        0, 0, &progress_f, 0, static_cast<float>(image.width * image.height));
+      Rectangle{0, image.height - progress_bar_thickness,
+                static_cast<float>(image.width), progress_bar_thickness},
+      0, 0, &progress_f, 0, static_cast<float>(image.width * image.height));
     EndDrawing();
     std::this_thread::sleep_for(std::chrono::milliseconds(10));
     render_fps = 1.0 / sw.elapsed();
@@ -302,7 +325,7 @@ int main(int argc, char **argv) {
 
   done = true;
   pool.cancel();
-  t.join();
+  rt_thread.join();
 
   UnloadTexture(tex);
   CloseWindow();

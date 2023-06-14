@@ -59,6 +59,13 @@ struct vec3 {
     return *this;
   }
 
+  vec3& operator*=(const vec3& v) {
+      e[0] *= v[0];
+      e[1] *= v[1];
+      e[2] *= v[2];
+      return *this;
+  }
+
   vec3 rotated(const vec3 &axis, REAL_T angle) const {
     // Rodrigues' rotation formula
     // https://en.wikipedia.org/wiki/Rodrigues%27_rotation_formula
