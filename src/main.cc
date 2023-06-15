@@ -199,7 +199,7 @@ int main(int argc, char** argv) {
   cam.origin = vec3(13, 2, 3);
   cam.look_at(vec3(0, 0, 0));
   cam.focus_distance = 10;
-  ray_tracer tracer(cam, 4, 20, image_width, image_height);
+  ray_tracer tracer(cam, 8, 50, image_width, image_height);
   tracer.add_object(
     std::make_shared<plane>(point3(0, 0, 0), vec3(0, 1, 0), ground_mat));
   scatter_objects(tracer);
@@ -314,10 +314,10 @@ int main(int argc, char** argv) {
     tracer.max_depth = static_cast<size_t>(max_depth);
     GuiSlider(Rectangle{5, cam_settings_start + 25, 150, 20}, nullptr,
               TextFormat("Focus Distance %.2f", cam.focus_distance),
-              &cam.focus_distance, 0.1, 10);
+              &cam.focus_distance, 0.5, 50);
     GuiSlider(Rectangle{5, cam_settings_start + 50, 150, 20}, nullptr,
-              TextFormat("Aperture %.2f", cam.aperture), &cam.aperture, 0.1,
-              10);
+              TextFormat("Aperture %.2f", cam.aperture), &cam.aperture, 0.001,
+              2.0);
     const float cam_settings_end = cam_settings_start + 75;
 
     // Image settings

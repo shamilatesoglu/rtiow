@@ -16,12 +16,13 @@ class camera {
     REAL_T x = (u * viewport_width) - half_width;
     REAL_T y = (v * viewport_height) - half_height;
 
+    auto hor = right() * focus_distance;
+    auto ver = up() * focus_distance;
     REAL_T lens_radius = aperture / 2.0;
     vec3 rnd = random_in_unit_disk() * lens_radius;
-    vec3 offset = right() * rnd.x() + up() * rnd.y();
+    vec3 offset = hor * rnd.x() + ver * rnd.y();
 
-    vec3 direction =
-      (front * focus_distance) + (right() * x) + (up() * y) - offset;
+    vec3 direction = (front * focus_distance) + (hor * x) + (ver * y) - offset;
 
     return ray(origin + offset, direction);
   }
