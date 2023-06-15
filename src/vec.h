@@ -102,6 +102,9 @@ struct vec3 {
     return (fabs(e[0]) < s) && (fabs(e[1]) < s) && (fabs(e[2]) < s);
   }
 
+  static vec3 random();
+  static vec3 random(REAL_T min, REAL_T max);
+
   REAL_T operator[](int i) const { return e[i]; }
   REAL_T &operator[](int i) { return e[i]; }
 
@@ -130,6 +133,28 @@ inline REAL_T reflectance(REAL_T cosine, REAL_T ref_idx) {
   auto r0 = (1 - ref_idx) / (1 + ref_idx);
   r0 = r0 * r0;
   return r0 + (1 - r0) * pow((1 - cosine), 5);
+}
+
+inline vec3 vec3::random(REAL_T min, REAL_T max) {
+  return vec3(random_real(min, max), random_real(min, max),
+              random_real(min, max));
+}
+
+inline vec3 vec3::random() {
+  return vec3(random_real(), random_real(), random_real());
+}
+
+inline vec3 random_unit_vector() {
+  auto a = random_real() * 2 * M_PI;
+  auto z = random_real() * 2 - 1;
+  auto r = sqrt(1 - z * z);
+  return vec3(r * cos(a), r * sin(a), z);
+}
+
+inline vec3 random_in_unit_disk() {
+  auto a = random_real() * 2 * M_PI;
+  auto r = sqrt(random_real());
+  return vec3(r * cos(a), r * sin(a), 0);
 }
 
 using point3 = vec3; // 3D point

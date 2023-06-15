@@ -8,10 +8,8 @@
 #define M_PI 3.14159265358979323846
 #endif
 #include <cmath>
-#include <random>
 #include <memory>
-
-#include "vec.h"
+#include <random>
 
 inline REAL_T deg2rad(REAL_T degrees) {
   return degrees * M_PI / 180.0;
@@ -43,11 +41,4 @@ inline REAL_T clamp(REAL_T x, REAL_T min, REAL_T max) {
     return max;
   }
   return x;
-}
-
-inline vec3 random_unit_vector() {
-  auto a = random_real() * 2 * M_PI;
-  auto z = random_real() * 2 - 1;
-  auto r = sqrt(1 - z * z);
-  return vec3(r * cos(a), r * sin(a), z);
 }

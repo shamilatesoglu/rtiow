@@ -1,6 +1,6 @@
 #pragma once
 
-#include "common.h"
+#include "vec.h"
 
 struct material {
   virtual bool scatter(const class ray& r_in,

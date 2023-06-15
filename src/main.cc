@@ -112,45 +112,53 @@ struct ray_tracer {
   std::vector<std::shared_ptr<hittable>> objects;
 };
 
-void randomly_place_spheres(ray_tracer& tracer, size_t count) {
-  enum class material_type {
-    LAMBERTIAN,
-    METAL,
-    GLASS
-  };
+void scatter_objects(ray_tracer& tracer) {
   std::vector<std::shared_ptr<sphere>> spheres;
-  for (size_t i = 0; i < count;) {
+  // Place 3 big spheres
+  auto material1 = std::make_shared<glass>(color(1, 1, 1), 1.5);
+  spheres.emplace_back(std::make_shared<sphere>(point3(0, 1, 0), 1.0, material1));
+
+  auto material2 = std::make_shared<lambertian>(color(0.4, 0.2, 0.1));
+  spheres.emplace_back(std::make_shared<sphere>(point3(-4, 1, 0), 1.0, material2));
+
+  auto material3 = std::make_shared<metal>(color(0.7, 0.6, 0.5), 0.0);
+  spheres.emplace_back(std::make_shared<sphere>(point3(4, 1, 0), 1.0, material3));
+
+  for (size_t i = 0; i < 100;) {
+    auto choose_mat = random_real();
     auto radius = random_real(0.05, 0.25);
-    auto center = vec3(random_real(-3, 3), radius, random_real(-3, 3));
-    auto type = static_cast<material_type>(random_int(0, 2));
-    std::shared_ptr<material> mat;
-    switch (type) {
-      case material_type::LAMBERTIAN:
-        mat = std::make_shared<lambertian>(
-          color(random_real(), random_real(), random_real()));
-        break;
-      case material_type::METAL:
-        mat = std::make_shared<metal>(
-          color(random_real(), random_real(), random_real()),
-          random_real(0, 1));
-        break;
-      case material_type::GLASS:
-        mat = std::make_shared<glass>(
-          color(random_real(), random_real(), random_real()),
-          random_real(1.0, 2.5));
-        break;
-    }
-    bool try_again = false;
-    for (const auto& s : spheres) {
-      if ((s->center - center).length() < s->radius + radius) {
-        try_again = true;
-        break;
+    auto center = vec3(random_real(-10, 10), radius, random_real(-10, 10));
+
+    if ((center - point3(4, 0.2, 0)).length() > 0.9) {
+      std::shared_ptr<material> sphere_material;
+
+      if (choose_mat < 0.8) {
+        // diffuse
+        auto albedo = color::random() * color::random();
+        sphere_material = std::make_shared<lambertian>(albedo);
+
+      } else if (choose_mat < 0.95) {
+        // metal
+        auto albedo = color::random(0.5, 1);
+        auto fuzz = random_real(0, 0.5);
+        sphere_material = std::make_shared<metal>(albedo, fuzz);
+      } else {
+        // glass
+        sphere_material = std::make_shared<glass>(color(1, 1, 1), 1.5);
       }
+      bool try_again = false;
+      for (const auto& s : spheres) {
+        if ((s->center - center).length() < s->radius + radius) {
+          try_again = true;
+          break;
+        }
+      }
+      if (try_again)
+        continue;
+      spheres.emplace_back(
+        std::make_shared<sphere>(center, radius, sphere_material));
+      ++i;
     }
-    if (try_again)
-      continue;
-    spheres.emplace_back(std::make_shared<sphere>(center, radius, mat));
-    ++i;
   }
 
   for (const auto& s : spheres) {
@@ -159,7 +167,7 @@ void randomly_place_spheres(ray_tracer& tracer, size_t count) {
 }
 
 int main(int argc, char** argv) {
-  uint32_t thread_count = 32;
+  uint32_t thread_count = std::thread::hardware_concurrency();
   size_t image_width = 800;
   size_t image_height = 450;
 
@@ -182,13 +190,16 @@ int main(int argc, char** argv) {
   Image image = LoadImageFromScreen();
   Texture2D tex = LoadTextureFromImage(image);
 
-  auto plane_mat = std::make_shared<lambertian>(color(0.5, 0.5, 0.5));
+  auto ground_mat = std::make_shared<lambertian>(color(0.5, 0.5, 0.5));
 
   camera cam(90, aspect_ratio);
+  cam.origin = vec3(13, 2, 3);
+  cam.look_at(vec3(0, 0, 0));
+  cam.focus_distance = 10;
   ray_tracer tracer(cam, 4, 20, image_width, image_height);
   tracer.add_object(
-    std::make_shared<plane>(point3(0, 0, 0), vec3(0, 1, 0), plane_mat));
-  randomly_place_spheres(tracer, 100);
+    std::make_shared<plane>(point3(0, 0, 0), vec3(0, 1, 0), ground_mat));
+  scatter_objects(tracer);
 
   thread_pool pool(thread_count);
 
@@ -224,6 +235,9 @@ int main(int argc, char** argv) {
                 progress.store(0);
                 rt_sw.reset();
               }
+              if (done) {
+                break;
+              }
             }
           }
         }
@@ -254,7 +268,7 @@ int main(int argc, char** argv) {
         move_right -= 1;
       if (IsKeyDown(KEY_D))
         move_right += 1;
-      REAL_T move_speed = 0.1;
+      REAL_T move_speed = IsKeyDown(KEY_LEFT_SHIFT) ? 0.1 : 0.01;
       cam.move(move_right * move_speed, move_front * move_speed);
 
       if (IsMouseButtonDown(MOUSE_RIGHT_BUTTON)) {
@@ -284,11 +298,24 @@ int main(int argc, char** argv) {
               1000);
     GuiSlider(Rectangle{5, 70, 150, 20}, nullptr,
               TextFormat("Max Depth %i", int(max_depth)), &max_depth, 1, 100);
-    GuiCheckBox(Rectangle{5, 95, 20, 20}, "Lock camera", &lock_cam);
+    // Camera settings
+    const float cam_settings_start = 95;
+    GuiCheckBox(Rectangle{5, cam_settings_start, 20, 20}, "Lock camera",
+                &lock_cam);
     tracer.sample_count = static_cast<size_t>(sample_count);
     tracer.max_depth = static_cast<size_t>(max_depth);
+    GuiSlider(Rectangle{5, cam_settings_start + 25, 150, 20}, nullptr,
+              TextFormat("Focus Distance %.2f", cam.focus_distance),
+              &cam.focus_distance, 0.1, 10);
+    GuiSlider(Rectangle{5, cam_settings_start + 50, 150, 20}, nullptr,
+              TextFormat("Aperture %.2f", cam.aperture), &cam.aperture, 0.1,
+              10);
+    const float cam_settings_end = cam_settings_start + 75;
+
+    // Image settings
+    const float img_settings_start = cam_settings_end;
     // Write to disk
-    Rectangle filename_textbox_bounds = {5, 120, 150, 20};
+    Rectangle filename_textbox_bounds = {5, img_settings_start, 150, 20};
     if (CheckCollisionPointRec(GetMousePosition(), filename_textbox_bounds) &&
         IsMouseButtonPressed(MOUSE_LEFT_BUTTON)) {
       editing_filename = true;
@@ -299,12 +326,11 @@ int main(int argc, char** argv) {
       editing_filename = false;
     }
     GuiTextBox(filename_textbox_bounds, filename, 256, editing_filename);
-    if (GuiButton(Rectangle{5, 145, 150, 20}, "Export")) {
+    if (GuiButton(Rectangle{5, img_settings_start + 25, 150, 20}, "Export")) {
       ExportImage(image, filename);
     }
-
     // Reset image
-    if (GuiButton(Rectangle{5, 170, 150, 20}, "Reset")) {
+    if (GuiButton(Rectangle{5, img_settings_start + 50, 150, 20}, "Reset")) {
       pool.cancel();
       for (size_t i = 0; i < image.width * image.height; ++i) {
         write_pixel(image, i % image.width, i / image.width, color(0, 0, 0));
