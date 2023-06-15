@@ -116,13 +116,16 @@ void scatter_objects(ray_tracer& tracer) {
   std::vector<std::shared_ptr<sphere>> spheres;
   // Place 3 big spheres
   auto material1 = std::make_shared<glass>(color(1, 1, 1), 1.5);
-  spheres.emplace_back(std::make_shared<sphere>(point3(0, 1, 0), 1.0, material1));
+  spheres.emplace_back(
+    std::make_shared<sphere>(point3(0, 1, 0), 1.0, material1));
 
   auto material2 = std::make_shared<lambertian>(color(0.4, 0.2, 0.1));
-  spheres.emplace_back(std::make_shared<sphere>(point3(-4, 1, 0), 1.0, material2));
+  spheres.emplace_back(
+    std::make_shared<sphere>(point3(-4, 1, 0), 1.0, material2));
 
   auto material3 = std::make_shared<metal>(color(0.7, 0.6, 0.5), 0.0);
-  spheres.emplace_back(std::make_shared<sphere>(point3(4, 1, 0), 1.0, material3));
+  spheres.emplace_back(
+    std::make_shared<sphere>(point3(4, 1, 0), 1.0, material3));
 
   for (size_t i = 0; i < 100;) {
     auto choose_mat = random_real();
@@ -204,18 +207,20 @@ int main(int argc, char** argv) {
   thread_pool pool(thread_count);
 
   bool done = false;
+  bool suspend = false;
   REAL_T rt_frame_time = 0;
   std::atomic_uint progress = 0;
   stopwatch rt_sw;
-  auto rt_thread = std::thread([&done, &pool, &tracer, &image, &rt_frame_time,
-                                &progress, &rt_sw, &pixel_count]() {
+  auto rt_thread = std::thread([&done, &suspend, &pool, &tracer, &image,
+                                &rt_frame_time, &progress, &rt_sw,
+                                &pixel_count]() {
     const size_t segments = pool.pool_size();
     const size_t seg_size = image.width / segments;
     std::cout << "Segments: " << segments << std::endl;
     std::cout << "Segment size: " << seg_size << std::endl;
     for (size_t si = 0; si < segments; ++si) {
       pool.enqueue([&image, si, seg_size, segments, &progress, &tracer, &done,
-                    &rt_frame_time, &rt_sw, &pixel_count]() {
+                    &suspend, &rt_frame_time, &rt_sw, &pixel_count]() {
         const size_t start = si * seg_size;
         const size_t end = si == segments - 1 ? image.width : start + seg_size;
         char buf[256];
@@ -237,6 +242,9 @@ int main(int argc, char** argv) {
               }
               if (done) {
                 break;
+              }
+              while (suspend) {
+                std::this_thread::sleep_for(std::chrono::milliseconds(400));
               }
             }
           }
@@ -335,6 +343,10 @@ int main(int argc, char** argv) {
       for (size_t i = 0; i < image.width * image.height; ++i) {
         write_pixel(image, i % image.width, i / image.width, color(0, 0, 0));
       }
+    }
+    if (GuiButton(Rectangle{5, img_settings_start + 75, 150, 20},
+                  suspend ? "Resume" : "Suspend")) {
+      suspend = !suspend;
     }
 
     // Progress bar at the bottom
