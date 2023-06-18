@@ -9,7 +9,7 @@ bool lambertian::scatter(const ray &r_in, const hit_record &rec,
   if (scatter_direction.near_zero()) {
     scatter_direction = rec.normal;
   }
-  scattered = ray(rec.p, scatter_direction);
+  scattered = ray(rec.p, scatter_direction, r_in.time());
   attenuation = albedo;
   return true;
 }
@@ -17,7 +17,7 @@ bool lambertian::scatter(const ray &r_in, const hit_record &rec,
 bool metal::scatter(const ray &r_in, const hit_record &rec, color &attenuation,
                     ray &scattered) const {
   vec3 reflected = reflect(r_in.direction().normalized(), rec.normal);
-  scattered = ray(rec.p, reflected + fuzz * random_unit_vector());
+  scattered = ray(rec.p, reflected + fuzz * random_unit_vector(), r_in.time());
   attenuation = albedo;
   return (scattered.direction().dot(rec.normal) > 0);
 }
@@ -25,7 +25,7 @@ bool metal::scatter(const ray &r_in, const hit_record &rec, color &attenuation,
 bool glass::scatter(const ray &r_in, const hit_record &rec, color &attenuation,
                     ray &scattered) const {
   attenuation = albedo;
-  REAL_T refraction_ratio = rec.front_face ? (1.0 / ior) : ior;
+  real_t refraction_ratio = rec.front_face ? (1.0 / ior) : ior;
   vec3 unit_direction = r_in.direction().normalized();
   double cos_theta = fmin((-unit_direction).dot(rec.normal), 1.0);
   double sin_theta = sqrt(1.0 - cos_theta * cos_theta);
@@ -39,6 +39,6 @@ bool glass::scatter(const ray &r_in, const hit_record &rec, color &attenuation,
   else
     direction = refract(unit_direction, rec.normal, refraction_ratio);
 
-  scattered = ray(rec.p, direction);
+  scattered = ray(rec.p, direction, r_in.time());
   return true;
 }

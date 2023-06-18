@@ -47,11 +47,11 @@ struct ray_tracer {
 
   void clear_objects() { objects.clear(); }
 
-  color compute(REAL_T u, REAL_T v) {
+  color compute(real_t u, real_t v) {
     color c;
     for (int i = 0; i < sample_count; ++i) {
-      REAL_T up = u + random_real() * pixel_width;
-      REAL_T vp = v + random_real() * pixel_height;
+      real_t up = u + random_real() * pixel_width;
+      real_t vp = v + random_real() * pixel_height;
       color sample_color;
       ray r = camera.ray_to(up, vp);
       fire_ray(r, sample_color, max_depth);
@@ -90,7 +90,7 @@ struct ray_tracer {
     }
   }
 
-  bool hit(const ray& r, REAL_T t_min, REAL_T t_max, hit_record& rec) const {
+  bool hit(const ray& r, real_t t_min, real_t t_max, hit_record& rec) const {
     hit_record temp_rec;
     bool hit_anything = false;
     auto closest_so_far = t_max;
@@ -107,24 +107,24 @@ struct ray_tracer {
   const camera& camera;
   size_t image_width;
   size_t image_height;
-  REAL_T pixel_width;
-  REAL_T pixel_height;
+  real_t pixel_width;
+  real_t pixel_height;
   std::vector<std::shared_ptr<hittable>> objects;
 };
 
 void scatter_objects(ray_tracer& tracer) {
-  std::vector<std::shared_ptr<sphere>> spheres;
+  std::vector<std::shared_ptr<hittable>> objects;
   // Place 3 big spheres
   auto material1 = std::make_shared<glass>(color(1, 1, 1), 1.5);
-  spheres.emplace_back(
+  objects.emplace_back(
     std::make_shared<sphere>(point3(0, 1, 0), 1.0, material1));
 
   auto material2 = std::make_shared<lambertian>(color(0.4, 0.2, 0.1));
-  spheres.emplace_back(
+  objects.emplace_back(
     std::make_shared<sphere>(point3(-4, 1, 0), 1.0, material2));
 
   auto material3 = std::make_shared<metal>(color(0.7, 0.6, 0.5), 0.0);
-  spheres.emplace_back(
+  objects.emplace_back(
     std::make_shared<sphere>(point3(4, 1, 0), 1.0, material3));
 
   for (size_t i = 0; i < 100;) {
@@ -132,39 +132,44 @@ void scatter_objects(ray_tracer& tracer) {
     auto radius = random_real(0.05, 0.25);
     auto center = vec3(random_real(-10, 10), radius, random_real(-10, 10));
 
-    if ((center - point3(4, 0.2, 0)).length() > 0.9) {
-      std::shared_ptr<material> sphere_material;
+    std::shared_ptr<material> sphere_material;
+    std::vector<std::shared_ptr<hittable>> candidates;
+    std::shared_ptr<hittable> candidate;
 
-      if (choose_mat < 0.8) {
-        // diffuse
-        auto albedo = color::random() * color::random();
-        sphere_material = std::make_shared<lambertian>(albedo);
-
-      } else if (choose_mat < 0.95) {
-        // metal
-        auto albedo = color::random(0.5, 1);
-        auto fuzz = random_real(0, 0.5);
-        sphere_material = std::make_shared<metal>(albedo, fuzz);
-      } else {
-        // glass
-        sphere_material = std::make_shared<glass>(color(1, 1, 1), 1.5);
-      }
-      bool try_again = false;
-      for (const auto& s : spheres) {
-        if ((s->center - center).length() < s->radius + radius) {
+    if (choose_mat < 0.8) {
+      // diffuse
+      auto albedo = color::random() * color::random();
+      sphere_material = std::make_shared<lambertian>(albedo);
+      auto center2 = center + vec3(0, random_real(0, 0.5), 0);
+      candidate = std::make_shared<moving_sphere>(center, center2, 0.0, 1.0,
+                                                  radius, sphere_material);
+    } else if (choose_mat < 0.95) {
+      // metal
+      auto albedo = color::random(0.5, 1);
+      auto fuzz = random_real(0, 0.5);
+      sphere_material = std::make_shared<metal>(albedo, fuzz);
+      candidate = std::make_shared<sphere>(center, radius, sphere_material);
+    } else {
+      // glass
+      sphere_material = std::make_shared<glass>(color(1, 1, 1), 1.5);
+      candidate = std::make_shared<sphere>(center, radius, sphere_material);
+    }
+    bool try_again = false;
+    for (const auto& obj : objects) {
+      for (const auto& candidate : candidates) {
+        if (obj->bounding_box().overlaps(candidate->bounding_box())) {
           try_again = true;
           break;
         }
       }
-      if (try_again)
-        continue;
-      spheres.emplace_back(
-        std::make_shared<sphere>(center, radius, sphere_material));
+    }
+    if (!try_again) {
+      objects.emplace_back(candidate);
       ++i;
     }
   }
 
-  for (const auto& s : spheres) {
+  for (const auto& s : objects) {
     tracer.add_object(s);
   }
 }
@@ -185,7 +190,7 @@ int main(int argc, char** argv) {
   }
 
   // Image
-  const auto aspect_ratio = static_cast<REAL_T>(image_width) / image_height;
+  const auto aspect_ratio = static_cast<real_t>(image_width) / image_height;
   const auto pixel_count = image_width * image_height;
 
   InitWindow(image_width, image_height, "RTIOW");
@@ -195,10 +200,8 @@ int main(int argc, char** argv) {
 
   auto ground_mat = std::make_shared<lambertian>(color(0.5, 0.5, 0.5));
 
-  camera cam(90, aspect_ratio);
-  cam.origin = vec3(13, 2, 3);
+  camera cam(90, aspect_ratio, 0.1, 10, point3(13, 2, 3), 0, 1);
   cam.look_at(vec3(0, 0, 0));
-  cam.focus_distance = 10;
   ray_tracer tracer(cam, 8, 50, image_width, image_height);
   tracer.add_object(
     std::make_shared<plane>(point3(0, 0, 0), vec3(0, 1, 0), ground_mat));
@@ -208,7 +211,7 @@ int main(int argc, char** argv) {
 
   bool done = false;
   bool suspend = false;
-  REAL_T rt_frame_time = 0;
+  real_t rt_frame_time = 0;
   std::atomic_uint progress = 0;
   stopwatch rt_sw;
   auto rt_thread = std::thread([&done, &suspend, &pool, &tracer, &image,
@@ -229,8 +232,8 @@ int main(int argc, char** argv) {
         while (!done) {
           for (size_t i = start; i < end; ++i) {
             for (size_t j = 0; j < image.height; ++j) {
-              REAL_T u = static_cast<REAL_T>(i) / (image.width - 1);
-              REAL_T v = static_cast<REAL_T>(j) / (image.height - 1);
+              real_t u = static_cast<real_t>(i) / (image.width - 1);
+              real_t v = static_cast<real_t>(j) / (image.height - 1);
               v = 1.0 - v;
               auto c = tracer.compute(u, v);
               write_pixel(image, i, j, c);
@@ -257,7 +260,7 @@ int main(int argc, char** argv) {
 
   bool lock_cam = true;
 
-  REAL_T render_fps = 0;
+  real_t render_fps = 0;
   char filename[256] = "render.png";
   bool editing_filename = false;
 
@@ -266,8 +269,8 @@ int main(int argc, char** argv) {
     BeginDrawing();
 
     if (!lock_cam) {
-      REAL_T move_right = 0;
-      REAL_T move_front = 0;
+      real_t move_right = 0;
+      real_t move_front = 0;
       if (IsKeyDown(KEY_W))
         move_front += 1;
       if (IsKeyDown(KEY_S))
@@ -276,13 +279,13 @@ int main(int argc, char** argv) {
         move_right -= 1;
       if (IsKeyDown(KEY_D))
         move_right += 1;
-      REAL_T move_speed = IsKeyDown(KEY_LEFT_SHIFT) ? 0.1 : 0.01;
+      real_t move_speed = IsKeyDown(KEY_LEFT_SHIFT) ? 0.1 : 0.01;
       cam.move(move_right * move_speed, move_front * move_speed);
 
       if (IsMouseButtonDown(MOUSE_RIGHT_BUTTON)) {
         auto delta = GetMouseDelta();
-        REAL_T dx = delta.x / image_width * 2;
-        REAL_T dy = delta.y / image_height * 2;
+        real_t dx = delta.x / image_width * 2;
+        real_t dy = delta.y / image_height * 2;
         cam.change_direction(dx, dy);
       }
     }
@@ -290,7 +293,7 @@ int main(int argc, char** argv) {
     UpdateTexture(tex, image.data);
     DrawTexture(tex, 0, 0, WHITE);
 
-    REAL_T rt_fps = 1.0 / rt_frame_time;
+    real_t rt_fps = 1.0 / rt_frame_time;
     char fps_str[128];
     snprintf(fps_str, sizeof(fps_str), "RT: %.2f FPS (%s)", rt_fps,
              stopwatch::elapsed_str(rt_frame_time).c_str());

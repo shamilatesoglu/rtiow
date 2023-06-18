@@ -4,27 +4,36 @@
 
 class camera {
  public:
-  camera(REAL_T hfov, REAL_T aspect_ratio) {
+  camera(real_t hfov, real_t aspect_ratio, float aperture = 0.1,
+         float focus_distance = 1.0,
+         const point3& origin = point3(0.0, 0.5, 0.0),
+         real_t shutter_open_time = 0.0, real_t shutter_close_time = 0.0)
+      : aperture(aperture),
+        focus_distance(focus_distance),
+        origin(origin),
+        shutter_open_time(shutter_open_time),
+        shutter_close_time(shutter_close_time) {
     auto theta = deg2rad(hfov);
     viewport_width = 2.0 * tan(theta / 2);
     viewport_height = viewport_width / aspect_ratio;
   }
 
-  ray ray_to(REAL_T u, REAL_T v) const {
-    REAL_T half_width = viewport_width / 2.0;
-    REAL_T half_height = viewport_height / 2.0;
-    REAL_T x = (u * viewport_width) - half_width;
-    REAL_T y = (v * viewport_height) - half_height;
+  ray ray_to(real_t u, real_t v) const {
+    real_t half_width = viewport_width / 2.0;
+    real_t half_height = viewport_height / 2.0;
+    real_t x = (u * viewport_width) - half_width;
+    real_t y = (v * viewport_height) - half_height;
 
     auto hor = right() * focus_distance;
     auto ver = up() * focus_distance;
-    REAL_T lens_radius = aperture / 2.0;
+    real_t lens_radius = aperture / 2.0;
     vec3 rnd = random_in_unit_disk() * lens_radius;
     vec3 offset = hor * rnd.x() + ver * rnd.y();
 
     vec3 direction = (front * focus_distance) + (hor * x) + (ver * y) - offset;
 
-    return ray(origin + offset, direction);
+    return ray(origin + offset, direction,
+               random_real(shutter_open_time, shutter_close_time));
   }
 
   vec3 right() const { return front.cross(view_up).normalized(); }
@@ -33,19 +42,19 @@ class camera {
 
   void look_at(const point3& target) { front = (target - origin).normalized(); }
 
-  void move_forward(REAL_T distance) { origin += front * distance; }
+  void move_forward(real_t distance) { origin += front * distance; }
 
-  void move_right(REAL_T distance) { origin += right() * distance; }
+  void move_right(real_t distance) { origin += right() * distance; }
 
-  void move(REAL_T right, REAL_T forward) {
+  void move(real_t right, real_t forward) {
     move_right(right);
     move_forward(forward);
   }
 
-  void change_direction(REAL_T du, REAL_T dv) {
+  void change_direction(real_t du, real_t dv) {
     // clang-format off
-    REAL_T theta = atan2(front.x(), front.z());
-    REAL_T phi = atan2(front.y(), sqrt(front.x() * front.x() + front.z() * front.z()));
+    real_t theta = atan2(front.x(), front.z());
+    real_t phi = atan2(front.y(), sqrt(front.x() * front.x() + front.z() * front.z()));
     theta += du;
     phi += dv;
     if (phi > M_PI / 2.0 - 0.01) phi = M_PI / 2.0 - 0.01;
@@ -61,7 +70,10 @@ class camera {
   float aperture = 0.1;
   float focus_distance = front.length();
 
+  real_t shutter_open_time = 0.0;
+  real_t shutter_close_time = 0.0;
+
  protected:
-  REAL_T viewport_height;
-  REAL_T viewport_width;
+  real_t viewport_height;
+  real_t viewport_width;
 };

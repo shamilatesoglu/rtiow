@@ -1,7 +1,7 @@
 #pragma once
 
-#ifndef REAL_T
-#define REAL_T double
+#ifndef real_t
+#define real_t double
 #endif
 
 #ifdef _WIN32
@@ -11,7 +11,7 @@
 #include <memory>
 #include <random>
 
-inline REAL_T deg2rad(REAL_T degrees) {
+inline real_t deg2rad(real_t degrees) {
   return degrees * M_PI / 180.0;
 }
 
@@ -21,11 +21,11 @@ inline int fastrand() {
   return (g_seed >> 16) & 0x7FFF;
 }
 
-inline REAL_T random_real() {
-  return static_cast<REAL_T>(fastrand()) / 0x7FFF;
+inline real_t random_real() {
+  return static_cast<real_t>(fastrand()) / 0x7FFF;
 }
 
-inline REAL_T random_real(REAL_T min, REAL_T max) {
+inline real_t random_real(real_t min, real_t max) {
   return min + (max - min) * random_real();
 }
 
@@ -33,7 +33,7 @@ inline int random_int(int min, int max) {
   return fastrand() % (max - min + 1) + min;
 }
 
-inline REAL_T clamp(REAL_T x, REAL_T min, REAL_T max) {
+inline real_t clamp(real_t x, real_t min, real_t max) {
   if (x < min) {
     return min;
   }
