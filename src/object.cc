@@ -32,9 +32,10 @@ bool sphere::hit(const ray& r, real_t t_min, real_t t_max,
   return true;
 }
 
-aabb sphere::bounding_box() const {
-  return aabb(center - vec3(radius, radius, radius),
-              center + vec3(radius, radius, radius));
+bool sphere::bounding_box(real_t time0, real_t time1, aabb& out) const {
+  out = aabb(center - vec3(radius, radius, radius),
+             center + vec3(radius, radius, radius));
+  return true;
 }
 
 bool moving_sphere::hit(const ray& r, real_t t_min, real_t t_max,
@@ -69,9 +70,12 @@ bool moving_sphere::hit(const ray& r, real_t t_min, real_t t_max,
   return true;
 }
 
-aabb moving_sphere::bounding_box() const {
-  return aabb(center(0) - vec3(radius, radius, radius),
-              center(0) + vec3(radius, radius, radius));
+bool moving_sphere::bounding_box(real_t time0, real_t time1, aabb& out) const {
+  out = surrounding_box(aabb(center(time0) - vec3(radius, radius, radius),
+                             center(time0) + vec3(radius, radius, radius)),
+                        aabb(center(time1) - vec3(radius, radius, radius),
+                             center(time1) + vec3(radius, radius, radius)));
+  return true;
 }
 
 bool plane::hit(const ray& r, real_t t_min, real_t t_max,
@@ -100,7 +104,8 @@ bool plane::hit(const ray& r, real_t t_min, real_t t_max,
   return true;
 }
 
-aabb plane::bounding_box() const {
-  return aabb(center - vec3(FLT_MAX, FLT_EPSILON, FLT_MAX),
-              center + vec3(FLT_MAX, FLT_EPSILON, FLT_MAX));
+bool plane::bounding_box(real_t time0, real_t time1, aabb& out) const {
+  out = aabb(center - vec3(INFINITY, FLT_EPSILON, INFINITY),
+              center + vec3(INFINITY, FLT_EPSILON, INFINITY));
+  return true;
 }

@@ -3,6 +3,8 @@
 #define RAYGUI_IMPLEMENTATION
 #include <raygui.h>
 
+#include "aabb.h"
+#include "bvh.h"
 #include "camera.h"
 #include "object.h"
 #include "ray.h"
@@ -10,6 +12,7 @@
 #include "stopwatch.h"
 #include "thread_pool.h"
 #include "vec.h"
+
 
 color real_to_screen(const color& c) {
   return 255.999 * c;
@@ -47,6 +50,14 @@ struct ray_tracer {
 
   void clear_objects() { objects.clear(); }
 
+  void build_bvh() {
+    stopwatch sw;
+    bvh_root = std::make_shared<bvh_node>(objects, 0, objects.size(), 0, 1);
+    std::cout << "BVH build time: " << sw.elapsed() << "s\n";
+    objects.clear();
+    objects.emplace_back(bvh_root);
+  }
+
   color compute(real_t u, real_t v) {
     color c;
     for (int i = 0; i < sample_count; ++i) {
@@ -76,7 +87,7 @@ struct ray_tracer {
       return;
     }
     hit_record rec;
-    if (hit(r, 0.001, INFINITY, rec)) {
+    if (bvh_root->hit(r, 0.001, INFINITY, rec)) {
       ray scattered;
       color attenuation;
       if (rec.mat->scatter(r, rec, attenuation, scattered)) {
@@ -110,6 +121,7 @@ struct ray_tracer {
   real_t pixel_width;
   real_t pixel_height;
   std::vector<std::shared_ptr<hittable>> objects;
+  std::shared_ptr<bvh_node> bvh_root;
 };
 
 void scatter_objects(ray_tracer& tracer) {
@@ -133,7 +145,6 @@ void scatter_objects(ray_tracer& tracer) {
     auto center = vec3(random_real(-10, 10), radius, random_real(-10, 10));
 
     std::shared_ptr<material> sphere_material;
-    std::vector<std::shared_ptr<hittable>> candidates;
     std::shared_ptr<hittable> candidate;
 
     if (choose_mat < 0.8) {
@@ -156,11 +167,15 @@ void scatter_objects(ray_tracer& tracer) {
     }
     bool try_again = false;
     for (const auto& obj : objects) {
-      for (const auto& candidate : candidates) {
-        if (obj->bounding_box().overlaps(candidate->bounding_box())) {
-          try_again = true;
-          break;
-        }
+      aabb box1;
+      aabb box2;
+      if (!obj->bounding_box(0, 1, box1) ||
+          !candidate->bounding_box(0, 1, box2)) {
+        continue;
+      }
+      if (box1.overlaps(box2)) {
+        try_again = true;
+        break;
       }
     }
     if (!try_again) {
@@ -206,6 +221,8 @@ int main(int argc, char** argv) {
   tracer.add_object(
     std::make_shared<plane>(point3(0, 0, 0), vec3(0, 1, 0), ground_mat));
   scatter_objects(tracer);
+
+  tracer.build_bvh();
 
   thread_pool pool(thread_count);
 

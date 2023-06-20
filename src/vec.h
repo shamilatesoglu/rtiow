@@ -173,18 +173,3 @@ inline vec3 random_in_unit_disk() {
 
 using point3 = vec3;  // 3D point
 using color = vec3;   // RGB color
-
-struct aabb {
-  aabb() {}
-
-  aabb(const point3& a, const point3& b) : min(a), max(b) {}
-
-  bool overlaps(const aabb& other) const {
-    return (min.x() <= other.max.x() && max.x() >= other.min.x()) &&
-           (min.y() <= other.max.y() && max.y() >= other.min.y()) &&
-           (min.z() <= other.max.z() && max.z() >= other.min.z());
-  }
-
-  point3 min;
-  point3 max;
-};
