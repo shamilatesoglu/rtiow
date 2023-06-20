@@ -1,5 +1,7 @@
 #include "object.h"
 
+#include <cfloat>
+
 bool sphere::hit(const ray& r, real_t t_min, real_t t_max,
                  hit_record& rec) const {
   // Ray Center: R
