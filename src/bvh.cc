@@ -30,8 +30,8 @@ bool box_z_compare(const std::shared_ptr<hittable> a,
 
 bvh_node::bvh_node(const std::vector<std::shared_ptr<hittable>>& src_objects,
                    size_t start, size_t end, double time0, double time1) {
-  auto objects =
-    src_objects;  // Create a modifiable array of the source scene objects
+  // Create a modifiable array of the source scene objects
+  auto objects = src_objects;
 
   int axis = random_int(0, 2);
   auto comparator = (axis == 0)   ? box_x_compare
@@ -41,6 +41,7 @@ bvh_node::bvh_node(const std::vector<std::shared_ptr<hittable>>& src_objects,
   size_t object_span = end - start;
   if (object_span == 1) {
     left = right = objects[start];
+    leaf = true;
   } else if (object_span == 2) {
     if (comparator(objects[start], objects[start + 1])) {
       left = objects[start];

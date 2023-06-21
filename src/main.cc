@@ -168,19 +168,18 @@ void draw_aabb(Image& img, const aabb& box, const camera& cam, const color& c) {
   draw_line(img, points2d[1], points2d[5], c);
   draw_line(img, points2d[2], points2d[6], c);
   draw_line(img, points2d[3], points2d[7], c);
-  
 }
 
-void draw_bvh(Image& img, bvh_node* root, const camera& cam) {
-  color bvh_box_color(0, 1, 0);
+void draw_bvh(Image& img, bvh_node* root, const camera& cam, size_t depth = 0) {
+  auto bvh_box_color = color(0, 1, 0) * (depth + 1) / 10;
   color bvh_leaf_color(1, 0, 0);
   while (root) {
-    if (root->is_leaf()) {
+    if (root->leaf) {
       draw_aabb(img, root->box, cam, bvh_leaf_color);
     } else {
       draw_aabb(img, root->box, cam, bvh_box_color);
-      draw_bvh(img, dynamic_cast<bvh_node*>(root->left.get()), cam);
-      draw_bvh(img, dynamic_cast<bvh_node*>(root->right.get()), cam);
+      draw_bvh(img, dynamic_cast<bvh_node*>(root->left.get()), cam, depth + 1);
+      draw_bvh(img, dynamic_cast<bvh_node*>(root->right.get()), cam, depth + 1);
     }
     break;
   }

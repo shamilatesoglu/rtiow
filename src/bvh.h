@@ -12,9 +12,8 @@ struct bvh_node : hittable {
   virtual bool bounding_box(double time0, double time1,
                             aabb& output_box) const override;
 
-  bool is_leaf() const { return left == nullptr && right == nullptr; }
-
   std::shared_ptr<hittable> left;
   std::shared_ptr<hittable> right;
   aabb box;
+  bool leaf = false;
 };
