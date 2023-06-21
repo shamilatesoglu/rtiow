@@ -2,5 +2,6 @@ build
 ninja_build
 xcode_build
 msvc_build
+make_build
 compile_commands.json
 .cache

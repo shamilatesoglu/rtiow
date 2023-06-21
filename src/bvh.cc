@@ -1,5 +1,7 @@
 #include "bvh.h"
 
+#include <iostream>
+
 inline bool box_compare(const std::shared_ptr<hittable> a,
                         const std::shared_ptr<hittable> b, int axis) {
   aabb box_a;

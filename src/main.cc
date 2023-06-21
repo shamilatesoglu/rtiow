@@ -13,7 +13,6 @@
 #include "thread_pool.h"
 #include "vec.h"
 
-
 color real_to_screen(const color& c) {
   return 255.999 * c;
 }
@@ -79,6 +78,7 @@ struct ray_tracer {
 
   size_t sample_count;
   size_t max_depth;
+  std::shared_ptr<bvh_node> bvh_root;
 
  protected:
   void fire_ray(const ray& r, color& c, size_t depth) {
@@ -121,8 +121,59 @@ struct ray_tracer {
   real_t pixel_width;
   real_t pixel_height;
   std::vector<std::shared_ptr<hittable>> objects;
-  std::shared_ptr<bvh_node> bvh_root;
 };
+
+void draw_line(Image& img, const point2& p0, const point2& p1, const color& c) {
+  // Draw line to image
+  Color color = {static_cast<uint8_t>(c.x() * 255.999),
+                 static_cast<uint8_t>(c.y() * 255.999),
+                 static_cast<uint8_t>(c.z() * 255.999), 255};
+  ImageDrawLine(&img, p0.x(), p0.y(), p1.x(), p1.y(), color);
+}
+
+void draw_aabb(Image& img, const aabb& box, const camera& cam, const color& c) {
+  auto p0 = box.min;
+  auto p1 = box.max;
+  auto p2 = point3(p0.x(), p0.y(), p1.z());
+  auto p3 = point3(p0.x(), p1.y(), p0.z());
+  auto p4 = point3(p1.x(), p0.y(), p0.z());
+  auto p5 = point3(p0.x(), p1.y(), p1.z());
+  auto p6 = point3(p1.x(), p0.y(), p1.z());
+  auto p7 = point3(p1.x(), p1.y(), p0.z());
+  std::vector<point3> points = {p0, p1, p2, p3, p4, p5, p6, p7};
+  std::vector<point2> points2d(points.size());
+  // for (size_t i = 0; i < points.size(); ++i) {
+  //   points2d[i] = (cam.project(points[i]) + point2(0.5, 0.5)) *
+  //                 point2(img.width, img.height);
+  // }
+  draw_line(img, points2d[0], points2d[1], c);
+  draw_line(img, points2d[0], points2d[2], c);
+  draw_line(img, points2d[0], points2d[3], c);
+  draw_line(img, points2d[1], points2d[4], c);
+  draw_line(img, points2d[1], points2d[5], c);
+  draw_line(img, points2d[2], points2d[4], c);
+  draw_line(img, points2d[2], points2d[6], c);
+  draw_line(img, points2d[3], points2d[5], c);
+  draw_line(img, points2d[3], points2d[6], c);
+  draw_line(img, points2d[4], points2d[7], c);
+  draw_line(img, points2d[5], points2d[7], c);
+  draw_line(img, points2d[6], points2d[7], c);
+}
+
+void draw_bvh(Image& img, bvh_node* root, const camera& cam) {
+  color bvh_box_color(0, 1, 0);
+  color bvh_leaf_color(1, 0, 0);
+  while (root) {
+    if (root->is_leaf()) {
+      draw_aabb(img, root->box, cam, bvh_leaf_color);
+    } else {
+      draw_aabb(img, root->box, cam, bvh_box_color);
+      draw_bvh(img, dynamic_cast<bvh_node*>(root->left.get()), cam);
+      draw_bvh(img, dynamic_cast<bvh_node*>(root->right.get()), cam);
+    }
+    break;
+  }
+}
 
 void scatter_objects(ray_tracer& tracer) {
   std::vector<std::shared_ptr<hittable>> objects;
@@ -215,9 +266,25 @@ int main(int argc, char** argv) {
 
   auto ground_mat = std::make_shared<lambertian>(color(0.5, 0.5, 0.5));
 
-  camera cam(90, aspect_ratio, 0.1, 10, point3(13, 2, 3), 0, 1);
+  camera cam(90, aspect_ratio, 0.0, 10, point3(13, 2, 3), 0, 1);
   cam.look_at(vec3(0, 0, 0));
-  ray_tracer tracer(cam, 8, 50, image_width, image_height);
+
+  // camera cam(90, aspect_ratio, 0.1, 10, point3(0, 0, 3), 0, 1);
+  // cam.look_at(vec3(0, 0, -1));
+  // point3 target(0, 0, -1);
+  // auto projected = cam.project(target);
+  // assert(projected == vec2(0, 0));
+  // target = vec3(1, 0, -1);
+  // projected = cam.project(target);
+  // assert(projected == vec2(1, 0));
+  // target = vec3(0, 1, -1);
+  // projected = cam.project(target);
+  // assert(projected == vec2(0, 1));
+  // target = vec3(1, 1, -1);
+  // projected = cam.project(target);
+  // assert(projected == vec2(1, 1));
+
+  ray_tracer tracer(cam, 1, 50, image_width, image_height);
   tracer.add_object(
     std::make_shared<plane>(point3(0, 0, 0), vec3(0, 1, 0), ground_mat));
   scatter_objects(tracer);
@@ -275,8 +342,8 @@ int main(int argc, char** argv) {
     pool.wait();
   });
 
-  bool lock_cam = true;
-
+  bool debug = true;
+  bool lock_cam = false;
   real_t render_fps = 0;
   char filename[256] = "render.png";
   bool editing_filename = false;
@@ -307,6 +374,21 @@ int main(int argc, char** argv) {
       }
     }
 
+    if (IsKeyPressed(KEY_F1)) {
+      debug = !debug;
+    }
+    if (debug) {
+      // draw_bvh(image, tracer.bvh_root.get(), cam);
+      // Draw red pole from middle of the world
+      point3 p1(0, 0, 0);
+      point3 p2(0, 20, 0);
+
+      auto screen_p1 = cam.screen_space(p1, vec2(image.width, image.height));
+      auto screen_p2 = cam.screen_space(p2, vec2(image.width, image.height));
+      if (screen_p1 && screen_p2) {
+        draw_line(image, *screen_p1, *screen_p2, color(1, 0, 0));
+      }
+    }
     UpdateTexture(tex, image.data);
     DrawTexture(tex, 0, 0, WHITE);
 
@@ -317,6 +399,11 @@ int main(int argc, char** argv) {
     GuiLabel(Rectangle{5, 0, 200, 20}, fps_str);
     snprintf(fps_str, sizeof(fps_str), "Render: %.2f FPS", render_fps);
     GuiLabel(Rectangle{5, 20, 150, 20}, fps_str);
+
+    // Camera position (top right corner)
+    GuiLabel(Rectangle{image_width - 200.f, 0, 200, 20},
+             TextFormat("Camera: (%.2f, %.2f, %.2f)", cam.origin.x(),
+                        cam.origin.y(), cam.origin.z()));
 
     // Sample count and max depth sliders
     float sample_count = static_cast<float>(tracer.sample_count);
@@ -367,6 +454,14 @@ int main(int argc, char** argv) {
     if (GuiButton(Rectangle{5, img_settings_start + 75, 150, 20},
                   suspend ? "Resume" : "Suspend")) {
       suspend = !suspend;
+    }
+    if (debug) {
+      // With red text
+      int old_color = GuiGetStyle(LABEL, TEXT_COLOR_NORMAL);
+      GuiSetStyle(LABEL, TEXT_COLOR_NORMAL, 0xffff0000);
+      GuiLabel(Rectangle{5, img_settings_start + 100, 150, 20},
+               TextFormat("DEBUG"));
+      GuiSetStyle(LABEL, TEXT_COLOR_NORMAL, old_color);
     }
 
     // Progress bar at the bottom

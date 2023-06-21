@@ -18,7 +18,7 @@ class camera {
     viewport_height = viewport_width / aspect_ratio;
   }
 
-  ray ray_to(real_t u, real_t v) const {
+  ray ray_to(real_t u, real_t v, bool defocus_blur = true) const {
     real_t half_width = viewport_width / 2.0;
     real_t half_height = viewport_height / 2.0;
     real_t x = (u * viewport_width) - half_width;
@@ -27,13 +27,46 @@ class camera {
     auto hor = right() * focus_distance;
     auto ver = up() * focus_distance;
     real_t lens_radius = aperture / 2.0;
-    vec3 rnd = random_in_unit_disk() * lens_radius;
+    vec3 rnd =
+      defocus_blur ? random_in_unit_disk() * lens_radius : vec3(0, 0, 0);
     vec3 offset = hor * rnd.x() + ver * rnd.y();
 
     vec3 direction = (front * focus_distance) + (hor * x) + (ver * y) - offset;
 
     return ray(origin + offset, direction,
                random_real(shutter_open_time, shutter_close_time));
+  }
+
+  std::optional<vec2> project(const vec3& world_point) const {
+    // Project a 3D point to the canonical view space.
+    vec3 camera_point = world_point - origin;
+    real_t x = camera_point.dot(right());
+    real_t y = camera_point.dot(up());
+    real_t z = camera_point.dot(front);
+    if (z <= 0) {
+      return std::nullopt;
+    }
+    x /= z;
+    y /= z;
+    // At this point, x and y are in the range [-1, 1].
+    // We need to correct for FOV and aspect ratio.
+    x *= viewport_width / 2.0;
+    y *= viewport_height / 2.0;
+    
+    return vec2(x, y);
+  }
+
+  std::optional<vec2> screen_space(const vec3& world_point, const vec2& size) const {
+    auto p = project(world_point);
+    if (!p) {
+      return std::nullopt;
+    }
+    p->x() = (p->x() + 1.0) / 2.0;
+    p->y() = (p->y() + 1.0) / 2.0;
+    p->x() *= size.x();
+    p->y() *= size.y();
+    p->y() = size.y() - p->y();
+    return p;
   }
 
   vec3 right() const { return front.cross(view_up).normalized(); }
