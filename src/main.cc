@@ -133,31 +133,42 @@ void draw_line(Image& img, const point2& p0, const point2& p1, const color& c) {
 
 void draw_aabb(Image& img, const aabb& box, const camera& cam, const color& c) {
   auto p0 = box.min;
-  auto p1 = box.max;
-  auto p2 = point3(p0.x(), p0.y(), p1.z());
-  auto p3 = point3(p0.x(), p1.y(), p0.z());
-  auto p4 = point3(p1.x(), p0.y(), p0.z());
-  auto p5 = point3(p0.x(), p1.y(), p1.z());
-  auto p6 = point3(p1.x(), p0.y(), p1.z());
-  auto p7 = point3(p1.x(), p1.y(), p0.z());
+  auto p1 = point3(box.max.x(), box.min.y(), box.min.z());
+  auto p2 = point3(box.max.x(), box.max.y(), box.min.z());
+  auto p3 = point3(box.min.x(), box.max.y(), box.min.z());
+  auto p4 = point3(box.min.x(), box.min.y(), box.max.z());
+  auto p5 = point3(box.max.x(), box.min.y(), box.max.z());
+  auto p6 = box.max;
+  auto p7 = point3(box.min.x(), box.max.y(), box.max.z());
+
   std::vector<point3> points = {p0, p1, p2, p3, p4, p5, p6, p7};
   std::vector<point2> points2d(points.size());
-  // for (size_t i = 0; i < points.size(); ++i) {
-  //   points2d[i] = (cam.project(points[i]) + point2(0.5, 0.5)) *
-  //                 point2(img.width, img.height);
-  // }
+  bool any_behind = false;
+  for (size_t i = 0; i < points.size(); ++i) {
+    auto p = cam.screen_space(points[i], vec2(img.width, img.height));
+    if (!p) {
+      any_behind = true;
+      break;
+    }
+    points2d[i] = *p;
+  }
+  if (any_behind) {
+    return;
+  }
+  // Draw box
   draw_line(img, points2d[0], points2d[1], c);
-  draw_line(img, points2d[0], points2d[2], c);
-  draw_line(img, points2d[0], points2d[3], c);
-  draw_line(img, points2d[1], points2d[4], c);
-  draw_line(img, points2d[1], points2d[5], c);
-  draw_line(img, points2d[2], points2d[4], c);
-  draw_line(img, points2d[2], points2d[6], c);
-  draw_line(img, points2d[3], points2d[5], c);
-  draw_line(img, points2d[3], points2d[6], c);
-  draw_line(img, points2d[4], points2d[7], c);
-  draw_line(img, points2d[5], points2d[7], c);
+  draw_line(img, points2d[1], points2d[2], c);
+  draw_line(img, points2d[2], points2d[3], c);
+  draw_line(img, points2d[3], points2d[0], c);
+  draw_line(img, points2d[4], points2d[5], c);
+  draw_line(img, points2d[5], points2d[6], c);
   draw_line(img, points2d[6], points2d[7], c);
+  draw_line(img, points2d[7], points2d[4], c);
+  draw_line(img, points2d[0], points2d[4], c);
+  draw_line(img, points2d[1], points2d[5], c);
+  draw_line(img, points2d[2], points2d[6], c);
+  draw_line(img, points2d[3], points2d[7], c);
+  
 }
 
 void draw_bvh(Image& img, bvh_node* root, const camera& cam) {
@@ -266,25 +277,10 @@ int main(int argc, char** argv) {
 
   auto ground_mat = std::make_shared<lambertian>(color(0.5, 0.5, 0.5));
 
-  camera cam(90, aspect_ratio, 0.0, 10, point3(13, 2, 3), 0, 1);
+  camera cam(90, aspect_ratio, 0.1, 10, point3(13, 2, 3), 0, 1);
   cam.look_at(vec3(0, 0, 0));
 
-  // camera cam(90, aspect_ratio, 0.1, 10, point3(0, 0, 3), 0, 1);
-  // cam.look_at(vec3(0, 0, -1));
-  // point3 target(0, 0, -1);
-  // auto projected = cam.project(target);
-  // assert(projected == vec2(0, 0));
-  // target = vec3(1, 0, -1);
-  // projected = cam.project(target);
-  // assert(projected == vec2(1, 0));
-  // target = vec3(0, 1, -1);
-  // projected = cam.project(target);
-  // assert(projected == vec2(0, 1));
-  // target = vec3(1, 1, -1);
-  // projected = cam.project(target);
-  // assert(projected == vec2(1, 1));
-
-  ray_tracer tracer(cam, 1, 50, image_width, image_height);
+  ray_tracer tracer(cam, 4, 50, image_width, image_height);
   tracer.add_object(
     std::make_shared<plane>(point3(0, 0, 0), vec3(0, 1, 0), ground_mat));
   scatter_objects(tracer);
@@ -342,8 +338,8 @@ int main(int argc, char** argv) {
     pool.wait();
   });
 
-  bool debug = true;
-  bool lock_cam = false;
+  bool debug = false;
+  bool lock_cam = true;
   real_t render_fps = 0;
   char filename[256] = "render.png";
   bool editing_filename = false;
@@ -378,16 +374,7 @@ int main(int argc, char** argv) {
       debug = !debug;
     }
     if (debug) {
-      // draw_bvh(image, tracer.bvh_root.get(), cam);
-      // Draw red pole from middle of the world
-      point3 p1(0, 0, 0);
-      point3 p2(0, 20, 0);
-
-      auto screen_p1 = cam.screen_space(p1, vec2(image.width, image.height));
-      auto screen_p2 = cam.screen_space(p2, vec2(image.width, image.height));
-      if (screen_p1 && screen_p2) {
-        draw_line(image, *screen_p1, *screen_p2, color(1, 0, 0));
-      }
+      draw_bvh(image, tracer.bvh_root.get(), cam);
     }
     UpdateTexture(tex, image.data);
     DrawTexture(tex, 0, 0, WHITE);

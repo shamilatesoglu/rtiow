@@ -2,6 +2,8 @@
 
 #include "ray.h"
 
+#include <optional>
+
 class camera {
  public:
   camera(real_t hfov, real_t aspect_ratio, float aperture = 0.1,
@@ -37,35 +39,32 @@ class camera {
                random_real(shutter_open_time, shutter_close_time));
   }
 
+  /// Project a 3D point to the view space.
+  /// Returns the point in the range [-viewport_width/2, viewport_width/2] x [-viewport_height/2, viewport_height/2]
+  /// Returns nullopt if the point is behind the camera.
   std::optional<vec2> project(const vec3& world_point) const {
-    // Project a 3D point to the canonical view space.
-    vec3 camera_point = world_point - origin;
-    real_t x = camera_point.dot(right());
-    real_t y = camera_point.dot(up());
-    real_t z = camera_point.dot(front);
-    if (z <= 0) {
+    vec3 c2p = world_point - origin;
+    real_t d = c2p.dot(front);
+    if (d <= 0) {
       return std::nullopt;
     }
-    x /= z;
-    y /= z;
-    // At this point, x and y are in the range [-1, 1].
-    // We need to correct for FOV and aspect ratio.
-    x *= viewport_width / 2.0;
-    y *= viewport_height / 2.0;
-    
+    real_t x = c2p.dot(right()) / d;
+    real_t y = c2p.dot(up()) / d;
+    // Correct the image w.r.t. viewport size & FOV
+    x = x / viewport_width * 2.0;
+    y = y / viewport_height * 2.0;
     return vec2(x, y);
   }
 
-  std::optional<vec2> screen_space(const vec3& world_point, const vec2& size) const {
+  std::optional<vec2> screen_space(const vec3& world_point,
+                                   const vec2& size) const {
     auto p = project(world_point);
     if (!p) {
       return std::nullopt;
     }
-    p->x() = (p->x() + 1.0) / 2.0;
-    p->y() = (p->y() + 1.0) / 2.0;
-    p->x() *= size.x();
-    p->y() *= size.y();
-    p->y() = size.y() - p->y();
+    // Correct the image w.r.t. viewport size & FOV
+    p->x() = (p->x() + 1.0) / 2.0 * size.x();
+    p->y() = (1.0 - p->y()) / 2.0 * size.y();
     return p;
   }
 
