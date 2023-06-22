@@ -51,7 +51,7 @@ struct ray_tracer {
 
   void build_bvh() {
     stopwatch sw;
-    bvh_root = std::make_shared<bvh_node>(objects, 0, objects.size(), 0, 1);
+    bvh_root = std::make_shared<bvh_node>(objects, 0, 1);
     std::cout << "BVH build time: " << sw.elapsed() << "s\n";
     objects.clear();
     objects.emplace_back(bvh_root);
@@ -251,7 +251,7 @@ void scatter_objects(ray_tracer& tracer) {
 }
 
 int main(int argc, char** argv) {
-  uint32_t thread_count = std::thread::hardware_concurrency();
+  uint32_t thread_count = std::thread::hardware_concurrency() - 1;
   size_t image_width = 800;
   size_t image_height = 450;
 
@@ -281,7 +281,7 @@ int main(int argc, char** argv) {
 
   ray_tracer tracer(cam, 4, 50, image_width, image_height);
   tracer.add_object(
-    std::make_shared<plane>(point3(0, 0, 0), vec3(0, 1, 0), ground_mat));
+    std::make_shared<plane>(point3(0, -1, 0), vec3(0, 1, 0), ground_mat));
   scatter_objects(tracer);
 
   tracer.build_bvh();

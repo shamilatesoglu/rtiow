@@ -73,10 +73,10 @@ bool moving_sphere::hit(const ray& r, real_t t_min, real_t t_max,
 }
 
 bool moving_sphere::bounding_box(real_t time0, real_t time1, aabb& out) const {
-  out = surrounding_box(aabb(center(time0) - vec3(radius, radius, radius),
-                             center(time0) + vec3(radius, radius, radius)),
-                        aabb(center(time1) - vec3(radius, radius, radius),
-                             center(time1) + vec3(radius, radius, radius)));
+  out = (aabb(center(time0) - vec3(radius, radius, radius),
+              center(time0) + vec3(radius, radius, radius))
+           .surrounding(aabb(center(time1) - vec3(radius, radius, radius),
+                             center(time1) + vec3(radius, radius, radius))));
   return true;
 }
 
@@ -108,6 +108,6 @@ bool plane::hit(const ray& r, real_t t_min, real_t t_max,
 
 bool plane::bounding_box(real_t time0, real_t time1, aabb& out) const {
   out = aabb(center - vec3(INFINITY, FLT_EPSILON, INFINITY),
-              center + vec3(INFINITY, FLT_EPSILON, INFINITY));
+             center + vec3(INFINITY, FLT_EPSILON, INFINITY));
   return true;
 }

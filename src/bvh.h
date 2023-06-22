@@ -4,7 +4,11 @@
 
 struct bvh_node : hittable {
   bvh_node(const std::vector<std::shared_ptr<hittable>>& src_objects,
-           size_t start, size_t end, double time0, double time1);
+           double time0, double time1);
+
+  bvh_node(std::shared_ptr<hittable> left, std::shared_ptr<hittable> right,
+           const aabb& box, bool leaf = false)
+      : left(left), right(right), box(box), leaf(leaf) {}
 
   virtual bool hit(const ray& r, double t_min, double t_max,
                    hit_record& rec) const override;
