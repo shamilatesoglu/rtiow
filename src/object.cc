@@ -107,7 +107,5 @@ bool plane::hit(const ray& r, real_t t_min, real_t t_max,
 }
 
 bool plane::bounding_box(real_t time0, real_t time1, aabb& out) const {
-  out = aabb(center - vec3(INFINITY, FLT_EPSILON, INFINITY),
-             center + vec3(INFINITY, FLT_EPSILON, INFINITY));
-  return true;
+  return false;
 }

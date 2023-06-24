@@ -2,34 +2,24 @@
 
 #include <iostream>
 
-bvh_node::bvh_node(const std::vector<std::shared_ptr<hittable>>& src_objects,
-                   double time0, double time1) {
-  // Construct a BVH tree, according to the following constraints:
-  // 1. Lower down the tree, the bounding volumes should be smaller.
-  // 2. The bounding volumes should overlap as little as possible.
-  // 3. The bounding volumes should be as small as possible.
-  // 4. The tree should be as balanced as possible.
-
-  auto objects = src_objects;
-  // Build the first level with all the objects, containing only leaf nodes.
-  for (size_t i = 0; i < objects.size(); ++i) {
-    aabb box;
-    objects[i]->bounding_box(time0, time1, box);
-    objects[i] = std::make_shared<bvh_node>(objects[i], objects[i], box, true);
-  }
-
-  // Build the rest of the tree by merging the bounding volumes of the two nearest
-  // bounding volumes, until there is only the root node left.
-  while (objects.size() > 1) {
+std::shared_ptr<bvh_node> bvh_node::build(
+  std::vector<std::shared_ptr<hittable>>& objects, double time0, double time1) {
+  // Build the tree by merging the bounding volumes of the two nearest
+  // bounding volumes, until there is only the root node left. If the
+  // object's bounding box can not be computed, then it is not included in the tree.
+  bool stop = false;
+  while (!stop) {
     real_t min_distance = std::numeric_limits<real_t>::max();
     int min_i = -1;
     int min_j = -1;
     for (size_t i = 0; i < objects.size(); ++i) {
+      aabb box_i;
+      if (!objects[i]->bounding_box(time0, time1, box_i))
+        continue;
       for (size_t j = i + 1; j < objects.size(); ++j) {
-        aabb box_i;
         aabb box_j;
-        objects[i]->bounding_box(time0, time1, box_i);
-        objects[j]->bounding_box(time0, time1, box_j);
+        if (!objects[j]->bounding_box(time0, time1, box_j))
+          continue;
         real_t dst = box_i.distance_sq(box_j);
         if (dst < min_distance) {
           min_distance = dst;
@@ -38,21 +28,37 @@ bvh_node::bvh_node(const std::vector<std::shared_ptr<hittable>>& src_objects,
         }
       }
     }
-
-    auto left = objects[min_i];
-    auto right = objects[min_j];
-    aabb box_left, box_right;
-    left->bounding_box(time0, time1, box_left);
-    right->bounding_box(time0, time1, box_right);
-    objects[min_i] = std::make_shared<bvh_node>(
-      left, right, box_left.surrounding(box_right), false);
+    if (min_i == -1 || min_j == -1) {
+      stop = true;
+      continue;
+    }
+    aabb box_i;
+    objects[min_i]->bounding_box(time0, time1, box_i);
+    aabb box_j;
+    objects[min_j]->bounding_box(time0, time1, box_j);
+    objects.push_back(std::make_shared<bvh_node>(objects[min_i], objects[min_j],
+                                                 box_i.surrounding(box_j)));
     objects.erase(objects.begin() + min_j);
+    objects.erase(objects.begin() + min_i);
   }
 
-  left = objects[0];
-  right = objects[0];
-  left->bounding_box(time0, time1, box);
-  leaf = false;
+  // If there is only one object left, then it is the root node.
+  std::shared_ptr<hittable> left, right;
+  aabb box;
+  if (objects.size() == 1) {
+    left = right = objects[0];
+  } else if (objects.size() == 2) {
+    left = objects[0];
+    right = objects[1];
+    left->bounding_box(time0, time1, box);
+    aabb right_box;
+    right->bounding_box(time0, time1, right_box);
+    box = box.surrounding(right_box);
+  } else {
+    std::cerr << "bvh_node::bvh_node: objects.size() = " << objects.size()
+              << std::endl;
+  }
+  return std::make_shared<bvh_node>(left, right, box);
 }
 
 bool bvh_node::bounding_box(double time0, double time1,

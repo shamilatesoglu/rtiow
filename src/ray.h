@@ -29,7 +29,7 @@ struct ray {
 struct hit_record {
   point3 p;
   vec3 normal;
-  real_t t;
+  real_t t = INFINITY;
   bool front_face;
   std::shared_ptr<material> mat = nullptr;
 

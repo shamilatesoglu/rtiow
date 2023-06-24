@@ -10,6 +10,8 @@ struct vec3 {
 
   vec3(real_t e0, real_t e1, real_t e2) : e{e0, e1, e2} {}
 
+  vec3(real_t e) : e{e, e, e} {}
+
   real_t x() const { return e[0]; }
   real_t y() const { return e[1]; }
   real_t z() const { return e[2]; }

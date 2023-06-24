@@ -3,12 +3,17 @@
 #include "object.h"
 
 struct bvh_node : hittable {
-  bvh_node(const std::vector<std::shared_ptr<hittable>>& src_objects,
-           double time0, double time1);
+
+  // Modifies the objects vector with the new tree. If the object's bounding box
+  // can not be computed, then it is not included in the tree, but it'll still
+  // be available in the objects vector.
+  static std::shared_ptr<bvh_node> build(
+    std::vector<std::shared_ptr<hittable>>& objects, double time0,
+    double time1);
 
   bvh_node(std::shared_ptr<hittable> left, std::shared_ptr<hittable> right,
-           const aabb& box, bool leaf = false)
-      : left(left), right(right), box(box), leaf(leaf) {}
+           const aabb& box)
+      : left(left), right(right), box(box) {}
 
   virtual bool hit(const ray& r, double t_min, double t_max,
                    hit_record& rec) const override;
@@ -16,8 +21,16 @@ struct bvh_node : hittable {
   virtual bool bounding_box(double time0, double time1,
                             aabb& output_box) const override;
 
+  bvh_node* as_bvh_node() override { return this; }
+
+  bool is_leaf()
+    const {  // If any is null, or none of them is bvh_node, then it's a leaf.
+    if (!left || !right)
+      return true;
+    return !left->as_bvh_node() && !right->as_bvh_node();
+  }
+
   std::shared_ptr<hittable> left;
   std::shared_ptr<hittable> right;
   aabb box;
-  bool leaf = false;
 };
