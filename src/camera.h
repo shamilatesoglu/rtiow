@@ -39,6 +39,15 @@ class camera {
                random_real(shutter_open_time, shutter_close_time));
   }
 
+  real_t depth_to(const vec3& world_point) const {
+    vec3 c2p = world_point - origin;
+    real_t d = c2p.dot(front);
+    if (d <= 0) {
+      return std::numeric_limits<real_t>::max();
+    }
+    return d;
+  }
+
   /// Project a 3D point to the view space.
   /// Returns the point in the range [-viewport_width/2, viewport_width/2] x [-viewport_height/2, viewport_height/2]
   /// Returns nullopt if the point is behind the camera.
