@@ -4,6 +4,22 @@
 #include <mutex>
 #include <unordered_set>
 
+void get_sphere_uv(const vec3& p, real_t& u, real_t& v) {
+  // p: point on unit sphere
+  // u: [0, 1] longitude
+  // v: [0, 1] latitude
+
+  auto theta = acos(-p.y());
+  auto phi = atan2(-p.z(), p.x()) + M_PI;
+  u = phi / (2 * M_PI);
+  v = theta / M_PI;
+}
+
+void get_plane_uv(const vec3& p, real_t& u, real_t& v) {
+  u = p.x();
+  v = p.z();
+}
+
 bool sphere::hit(const ray& r, real_t t_min, real_t t_max,
                  hit_record& rec) const {
   // Ray Center: R
@@ -32,6 +48,7 @@ bool sphere::hit(const ray& r, real_t t_min, real_t t_max,
   rec.p = r.at(t);
   vec3 outward_normal = (rec.p - S) / radius;
   rec.set_face_normal(r, outward_normal);
+  get_sphere_uv(outward_normal, rec.u, rec.v);
   rec.mat = mat;
   return true;
 }
@@ -70,6 +87,7 @@ bool moving_sphere::hit(const ray& r, real_t t_min, real_t t_max,
   rec.p = r.at(t);
   vec3 outward_normal = (rec.p - S) / radius;
   rec.set_face_normal(r, outward_normal);
+  get_sphere_uv(outward_normal, rec.u, rec.v);
   rec.mat = mat;
   return true;
 }
@@ -104,6 +122,7 @@ bool plane::hit(const ray& r, real_t t_min, real_t t_max,
   rec.t = t;
   rec.p = r.at(t);
   rec.set_face_normal(r, n);
+  get_plane_uv(rec.p, rec.u, rec.v);
   rec.mat = mat;
   return true;
 }

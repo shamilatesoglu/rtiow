@@ -30,6 +30,8 @@ struct hit_record {
   point3 p;
   vec3 normal;
   real_t t = INFINITY;
+  real_t u;
+  real_t v;
   bool front_face;
   std::shared_ptr<material> mat = nullptr;
 

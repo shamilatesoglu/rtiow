@@ -26,11 +26,6 @@ inline void write_pixel(Image& image, size_t x, size_t y, const color& c) {
   ImageDrawPixel(&image, x, y, raylib_color(c));
 }
 
-void write_pixel_with_depth_test(Image& image, size_t x, size_t y,
-                                 const color& c, real_t level,
-                                 const class ray_tracer& tracer);
-
-void draw_line(Image& img, const point2& p0, const point2& p1, const color& c);
 void draw_aabb(Image& img, const struct aabb& box,
                const class ray_tracer& tracer, const color& c);
 void draw_bvh(Image& img, struct bvh_node* root, const ray_tracer& tracer,

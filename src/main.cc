@@ -104,7 +104,7 @@ int main(int argc, char** argv) {
   Image image = LoadImageFromScreen();
   Texture2D tex = LoadTextureFromImage(image);
 
-  auto ground_mat = std::make_shared<lambertian>(color(0.5, 0.5, 0.5));
+  auto ground_mat = std::make_shared<lambertian>(std::make_shared<plane_checker_texture>(color(0,0,0), color(1,1,1)));
 
   camera cam(90, aspect_ratio, 0.0, 10, point3(13, 2, 3), 0, 1);
   cam.look_at(vec3(0, 0, 0));
@@ -114,7 +114,7 @@ int main(int argc, char** argv) {
     std::make_shared<plane>(point3(0, 0, 0), vec3(0, 1, 0), ground_mat));
   scatter_objects(tracer);
 
-  //tracer.build_bvh();
+  tracer.build_bvh();
 
   thread_pool pool(thread_count);
 
@@ -168,7 +168,7 @@ int main(int argc, char** argv) {
   real_t render_fps = 0;
   char filename[256] = "render.png";
   bool editing_filename = false;
-
+  stopwatch progress_sw;
   while (!WindowShouldClose()) {
     stopwatch sw;
     BeginDrawing();
@@ -203,14 +203,27 @@ int main(int argc, char** argv) {
     }
     UpdateTexture(tex, image.data);
     DrawTexture(tex, 0, 0, WHITE);
-
+    
     real_t rt_fps = 1.0 / rt_frame_time;
-    char fps_str[128];
-    snprintf(fps_str, sizeof(fps_str), "RT: %.2f FPS (%s)", rt_fps,
-             stopwatch::elapsed_str(rt_frame_time).c_str());
-    GuiLabel(Rectangle{5, 0, 200, 20}, fps_str);
-    snprintf(fps_str, sizeof(fps_str), "Render: %.2f FPS", render_fps);
-    GuiLabel(Rectangle{5, 20, 150, 20}, fps_str);
+    float progress_f = static_cast<float>(progress.load());
+    float max_progress = static_cast<float>(image.width * image.height);
+    // Calculate the rate of progress per second
+    static real_t progress_per_sec = 0;
+    if (progress_sw.elapsed() >= 1.0) {
+        progress_sw.reset();
+        static real_t progress_last = 0;
+        progress_per_sec = progress_f - progress_last;
+        progress_last = progress_f;
+    }
+    // Remaining time
+    real_t remaining = (max_progress - progress_f) / progress_per_sec;
+
+    char perf_str[128];
+    snprintf(perf_str, sizeof(perf_str), "RT: %.2f FPS (%s) Rem: %s", rt_fps,
+             stopwatch::elapsed_str(rt_frame_time).c_str(), stopwatch::elapsed_str(remaining).c_str());
+    GuiLabel(Rectangle{5, 0, 280, 20}, perf_str);
+    snprintf(perf_str, sizeof(perf_str), "Render: %.2f FPS", render_fps);
+    GuiLabel(Rectangle{5, 20, 150, 20}, perf_str);
 
     // Camera position (top right corner)
     GuiLabel(Rectangle{image_width - 200.f, 0, 200, 20},
@@ -274,17 +287,16 @@ int main(int argc, char** argv) {
       // With red text
       int old_color = GuiGetStyle(LABEL, TEXT_COLOR_NORMAL);
       GuiSetStyle(LABEL, TEXT_COLOR_NORMAL, 0xffff0000);
-      GuiLabel(Rectangle{5, image.height - 20.f, 150, 20}, TextFormat("DEBUG"));
+      GuiLabel(Rectangle{5, image.height - 28.f, 150, 20}, TextFormat("DEBUG"));
       GuiSetStyle(LABEL, TEXT_COLOR_NORMAL, old_color);
     }
 
     // Progress bar at the bottom
-    float progress_f = static_cast<float>(progress.load());
     constexpr float progress_bar_thickness = 8.f;
     GuiProgressBar(
       Rectangle{0, image.height - progress_bar_thickness,
                 static_cast<float>(image.width), progress_bar_thickness},
-      0, 0, &progress_f, 0, static_cast<float>(image.width * image.height));
+      0, 0, &progress_f, 0, max_progress);
     EndDrawing();
     std::this_thread::sleep_for(std::chrono::milliseconds(10));
     render_fps = 1.0 / sw.elapsed();

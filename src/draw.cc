@@ -5,12 +5,8 @@
 #include "camera.h"
 #include "ray_tracer.h"
 
-// Taken in part from raylib's rtextures.c
 void draw_line(Image& dst, point3 start, point3 end, color color,
                const ray_tracer& tracer) {
-  // Using Bresenham's algorithm as described in
-  // Drawing Lines with Pixels - Joshua Scott - March 2012
-  // https://classic.csunplugged.org/wp-content/uploads/2014/12/Lines.pdf
   auto start_ss =
     tracer.camera.screen_space(start, vec2(dst.width, dst.height));
   auto end_ss = tracer.camera.screen_space(end, vec2(dst.width, dst.height));

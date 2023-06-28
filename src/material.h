@@ -1,6 +1,7 @@
 #pragma once
 
 #include "vec.h"
+#include "texture.h"
 
 struct material {
   virtual bool scatter(const class ray& r_in,
@@ -10,14 +11,15 @@ struct material {
 };
 
 struct lambertian : public material {
-  lambertian(const color& a) : albedo(a) {}
+  lambertian(std::shared_ptr<texture> a) : albedo(std::move(a)) {}
+  lambertian(const color& a) : albedo(std::make_shared<solid_color>(a)) {}
 
   virtual bool scatter(const ray& r_in,
                        const hit_record& rec,
                        color& attenuation,
                        ray& scattered) const override;
 
-  color albedo;
+  std::shared_ptr<texture> albedo;
 };
 
 struct metal : public material {

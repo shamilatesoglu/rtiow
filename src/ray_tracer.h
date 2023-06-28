@@ -56,7 +56,10 @@ struct ray_tracer {
       fire_ray(r, sample_color, max_depth);
       c += sample_color;
     }
-    return c / sample_count;
+    c.x() = pow(c.x() / sample_count, 1.0 / 2.2);
+    c.y() = pow(c.y() / sample_count, 1.0 / 2.2);
+    c.z() = pow(c.z() / sample_count, 1.0 / 2.2);
+    return c;
   }
 
   void render_pixel(Image& image, size_t x, size_t y) {
@@ -148,7 +151,6 @@ struct ray_tracer {
   }
 
   std::vector<hit_record> hit_recs;
-  std::mutex mtx;
 
   size_t image_width;
   size_t image_height;
