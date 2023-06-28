@@ -4,3 +4,6 @@
 [submodule "third_party/raygui"]
 	path = third_party/raygui
 	url = https://github.com/raysan5/raygui.git
+[submodule "third_party/aurora"]
+	path = third_party/aurora
+	url = https://github.com/shamilatesoglu/aurora.git

@@ -15,6 +15,17 @@
 #include "thread_pool.h"
 #include "vec.h"
 
+// globals
+static size_t g_image_width = 800;
+static size_t g_image_height = 600;
+auto g_aspect_ratio = static_cast<real_t>(g_image_width) / g_image_height;
+auto g_pixel_count = g_image_width * g_image_height;
+
+enum class scene : int {
+  random_spheres = 0,
+  cornell_box
+};
+
 void scatter_objects(ray_tracer& tracer) {
   std::vector<std::shared_ptr<hittable>> objects;
   // Place 3 big spheres
@@ -80,41 +91,55 @@ void scatter_objects(ray_tracer& tracer) {
   }
 }
 
+void setup_scene(ray_tracer& rt, scene scene) {
+  rt.clear_objects();
+  switch (scene) {
+    case scene::random_spheres: {
+      rt.camera = camera(90, g_aspect_ratio, 0.0, 10, point3(13, 2, 3), 0, 1);
+      rt.camera.look_at(vec3(0, 0, 0));
+      auto ground_mat =
+        std::make_shared<lambertian>(std::make_shared<plane_checker_texture>(
+          color(0, 0, 0), color(1, 1, 1)));
+      rt.add_object(
+        std::make_shared<plane>(point3(0, 0, 0), vec3(0, 1, 0), ground_mat));
+      scatter_objects(rt);
+      break;
+    }
+    case scene::cornell_box: {
+      break;
+    }
+  }
+}
+
 int main(int argc, char** argv) {
   uint32_t thread_count = std::thread::hardware_concurrency() - 1;
-  size_t image_width = 800;
-  size_t image_height = 450;
 
   for (int i = 1; i < argc; ++i) {
     if (strcmp(argv[i], "--thread-count") == 0) {
       thread_count = atoi(argv[++i]);
     } else if (strcmp(argv[i], "--width") == 0) {
-      image_width = atoi(argv[++i]);
+      g_image_width = atoi(argv[++i]);
     } else if (strcmp(argv[i], "--height") == 0) {
-      image_height = atoi(argv[++i]);
+      g_image_height = atoi(argv[++i]);
     }
   }
+  g_aspect_ratio = static_cast<real_t>(g_image_width) / g_image_height;
+  g_pixel_count = g_image_width * g_image_height;
 
   // Image
-  const auto aspect_ratio = static_cast<real_t>(image_width) / image_height;
-  const auto pixel_count = image_width * image_height;
-
-  InitWindow(image_width, image_height, "RTIOW");
-
+  InitWindow(g_image_width, g_image_height, "RTIOW");
   Image image = LoadImageFromScreen();
   Texture2D tex = LoadTextureFromImage(image);
 
-  auto ground_mat = std::make_shared<lambertian>(std::make_shared<plane_checker_texture>(color(0,0,0), color(1,1,1)));
+  // Ray tracer
+  ray_tracer rt(camera(90, g_aspect_ratio, 0.0, 10, point3(0, 0, 0), 0, 1), 1,
+                50, g_image_width, g_image_height);
+  rt.camera.look_at(vec3(0, 0, -1));
+  rt.build_bvh();
 
-  camera cam(90, aspect_ratio, 0.0, 10, point3(13, 2, 3), 0, 1);
-  cam.look_at(vec3(0, 0, 0));
-
-  ray_tracer tracer(cam, 1, 50, image_width, image_height);
-  tracer.add_object(
-    std::make_shared<plane>(point3(0, 0, 0), vec3(0, 1, 0), ground_mat));
-  scatter_objects(tracer);
-
-  tracer.build_bvh();
+  // Scene
+  scene selected_scene = scene::random_spheres, current_scene;
+  setup_scene(rt, current_scene = selected_scene);
 
   thread_pool pool(thread_count);
 
@@ -123,16 +148,15 @@ int main(int argc, char** argv) {
   real_t rt_frame_time = 0;
   std::atomic_uint progress = 0;
   stopwatch rt_sw;
-  auto rt_thread = std::thread([&done, &suspend, &pool, &tracer, &image,
-                                &rt_frame_time, &progress, &rt_sw,
-                                &pixel_count]() {
+  auto rt_thread = std::thread([&done, &suspend, &pool, &rt, &image,
+                                &rt_frame_time, &progress, &rt_sw]() {
     const size_t segments = pool.pool_size();
     const size_t seg_size = image.width / segments;
     std::cout << "Segments: " << segments << std::endl;
     std::cout << "Segment size: " << seg_size << std::endl;
     for (size_t si = 0; si < segments; ++si) {
-      pool.enqueue([&image, si, seg_size, segments, &progress, &tracer, &done,
-                    &suspend, &rt_frame_time, &rt_sw, &pixel_count]() {
+      pool.enqueue([&image, si, seg_size, segments, &progress, &rt, &done,
+                    &suspend, &rt_frame_time, &rt_sw]() {
         const size_t start = si * seg_size;
         const size_t end = si == segments - 1 ? image.width : start + seg_size;
         char buf[256];
@@ -141,9 +165,9 @@ int main(int argc, char** argv) {
         while (!done) {
           for (size_t i = start; i < end; ++i) {
             for (size_t j = 0; j < image.height; ++j) {
-              tracer.render_pixel(image, i, j);
+              rt.render_pixel(image, i, j);
               if (progress.fetch_add(1, std::memory_order_relaxed) ==
-                  pixel_count - 1) {
+                  g_pixel_count - 1) {
                 rt_frame_time = rt_sw.elapsed();
                 progress.store(0);
                 rt_sw.reset();
@@ -185,13 +209,13 @@ int main(int argc, char** argv) {
       if (IsKeyDown(KEY_D))
         move_right += 1;
       real_t move_speed = IsKeyDown(KEY_LEFT_SHIFT) ? 0.1 : 0.01;
-      cam.move(move_right * move_speed, move_front * move_speed);
+      rt.camera.move(move_right * move_speed, move_front * move_speed);
 
       if (IsMouseButtonDown(MOUSE_RIGHT_BUTTON)) {
         auto delta = GetMouseDelta();
-        real_t dx = delta.x / image_width * 2;
-        real_t dy = delta.y / image_height * 2;
-        cam.change_direction(dx, dy);
+        real_t dx = delta.x / g_image_width * 2;
+        real_t dy = delta.y / g_image_height * 2;
+        rt.camera.change_direction(dx, dy);
       }
     }
 
@@ -199,40 +223,49 @@ int main(int argc, char** argv) {
       debug = !debug;
     }
     if (debug) {
-      draw_bvh(image, tracer.bvh_root.get(), tracer, 0);
+      draw_bvh(image, rt.bvh_root.get(), rt, 0);
     }
     UpdateTexture(tex, image.data);
     DrawTexture(tex, 0, 0, WHITE);
-    
+
     real_t rt_fps = 1.0 / rt_frame_time;
     float progress_f = static_cast<float>(progress.load());
     float max_progress = static_cast<float>(image.width * image.height);
     // Calculate the rate of progress per second
     static real_t progress_per_sec = 0;
-    if (progress_sw.elapsed() >= 1.0) {
-        progress_sw.reset();
-        static real_t progress_last = 0;
-        progress_per_sec = progress_f - progress_last;
-        progress_last = progress_f;
+    if (auto elapsed = progress_sw.elapsed(); elapsed >= 1.0) {
+      progress_sw.reset();
+      static real_t progress_last = 0;
+      progress_per_sec = std::max(0.0, (progress_f - progress_last) / elapsed);
+      progress_last = progress_f;
     }
     // Remaining time
     real_t remaining = (max_progress - progress_f) / progress_per_sec;
 
     char perf_str[128];
-    snprintf(perf_str, sizeof(perf_str), "RT: %.2f FPS (%s) Rem: %s", rt_fps,
-             stopwatch::elapsed_str(rt_frame_time).c_str(), stopwatch::elapsed_str(remaining).c_str());
+    snprintf(perf_str, sizeof(perf_str), "RT: %.2f FPS (%s) -%s", rt_fps,
+             stopwatch::elapsed_str(rt_frame_time).c_str(),
+             stopwatch::elapsed_str(remaining).c_str());
     GuiLabel(Rectangle{5, 0, 280, 20}, perf_str);
     snprintf(perf_str, sizeof(perf_str), "Render: %.2f FPS", render_fps);
     GuiLabel(Rectangle{5, 20, 150, 20}, perf_str);
 
+    // Scene selector (top middle)
+    const char* scene_str = "Random Spheres;Cornell Box";
+    GuiComboBox(Rectangle{(g_image_width / 2.f) - 100, 0, 200, 20}, scene_str,
+                reinterpret_cast<int*>(&selected_scene));
+    if (current_scene != selected_scene) {
+      setup_scene(rt, current_scene = selected_scene);
+    }
+
     // Camera position (top right corner)
-    GuiLabel(Rectangle{image_width - 200.f, 0, 200, 20},
-             TextFormat("Camera: (%.2f, %.2f, %.2f)", cam.origin.x(),
-                        cam.origin.y(), cam.origin.z()));
+    GuiLabel(Rectangle{g_image_width - 200.f, 0, 200, 20},
+             TextFormat("Camera: (%.2f, %.2f, %.2f)", rt.camera.origin.x(),
+                        rt.camera.origin.y(), rt.camera.origin.z()));
 
     // Sample count and max depth sliders
-    float sample_count = static_cast<float>(tracer.sample_count);
-    float max_depth = static_cast<float>(tracer.max_depth);
+    float sample_count = static_cast<float>(rt.sample_count);
+    float max_depth = static_cast<float>(rt.max_depth);
     GuiSlider(Rectangle{5, 45, 150, 20}, nullptr,
               TextFormat("Samples %i", int(sample_count)), &sample_count, 1,
               1000);
@@ -242,21 +275,21 @@ int main(int argc, char** argv) {
     const float cam_settings_start = 95;
     GuiCheckBox(Rectangle{5, cam_settings_start, 20, 20}, "Lock camera",
                 &lock_cam);
-    tracer.sample_count = static_cast<size_t>(sample_count);
-    tracer.max_depth = static_cast<size_t>(max_depth);
+    rt.sample_count = static_cast<size_t>(sample_count);
+    rt.max_depth = static_cast<size_t>(max_depth);
     GuiSlider(Rectangle{5, cam_settings_start + 25, 150, 20}, nullptr,
-              TextFormat("Focus Distance %.2f", cam.focus_distance),
-              &cam.focus_distance, 0.5, 50);
+              TextFormat("Focus Distance %.2f", rt.camera.focus_distance),
+              &rt.camera.focus_distance, 0.5, 50);
     GuiSlider(Rectangle{5, cam_settings_start + 50, 150, 20}, nullptr,
-              TextFormat("Aperture %.2f", cam.aperture), &cam.aperture, 0.001,
-              2.0);
+              TextFormat("Aperture %.2f", rt.camera.aperture),
+              &rt.camera.aperture, 0.001, 2.0);
     const float cam_settings_end = cam_settings_start + 75;
 
     // Image settings
     const float img_settings_start = cam_settings_end;
     const char* mode_str = "Color;Normal;Depth";
     GuiComboBox(Rectangle{5, img_settings_start, 150, 20}, mode_str,
-                reinterpret_cast<int*>(&tracer.mode));
+                reinterpret_cast<int*>(&rt.mode));
     // Write to disk
     Rectangle filename_textbox_bounds = {5, img_settings_start + 25, 150, 20};
     if (CheckCollisionPointRec(GetMousePosition(), filename_textbox_bounds) &&

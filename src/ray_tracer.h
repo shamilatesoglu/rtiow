@@ -12,8 +12,8 @@
 // stl
 #include <iostream>
 #include <memory>
-#include <vector>
 #include <unordered_set>
+#include <vector>
 
 struct ray_tracer {
   enum class render_mode : int {
@@ -22,7 +22,7 @@ struct ray_tracer {
     depth
   } mode = render_mode::color;
 
-  ray_tracer(const class camera& cam, size_t sample_count, size_t max_depth,
+  ray_tracer(class camera cam, size_t sample_count, size_t max_depth,
              size_t image_width, size_t image_height)
       : sample_count(sample_count),
         max_depth(max_depth),
@@ -38,7 +38,10 @@ struct ray_tracer {
     objects.emplace_back(std::move(obj));
   }
 
-  void clear_objects() { objects.clear(); }
+  void clear_objects() {
+    objects.clear();
+    bvh_root.reset();
+  }
 
   void build_bvh() {
     stopwatch sw;
@@ -105,7 +108,7 @@ struct ray_tracer {
 
   size_t sample_count;
   size_t max_depth;
-  const camera& camera;
+  camera camera;
   std::shared_ptr<bvh_node> bvh_root;
 
  protected:
