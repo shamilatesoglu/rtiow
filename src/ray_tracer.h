@@ -93,12 +93,6 @@ struct ray_tracer {
     }
   }
 
-  color background_color(const ray& r) const {
-    vec3 unit_direction = r.direction().normalized();
-    auto t = 0.5 * (unit_direction.y() + 1.0);
-    return (1.0 - t) * color(1.0, 1.0, 1.0) + t * color(0.5, 0.7, 1.0);
-  }
-
   real_t depth_at(size_t x, size_t y) const {
     size_t idx = y * image_width + x;
     if (idx >= hit_recs.size()) {
@@ -116,6 +110,7 @@ struct ray_tracer {
   size_t max_depth;
   camera camera;
   std::shared_ptr<bvh_node> bvh_root;
+  color background;
 
  protected:
   void fire_ray(const ray& r, color& c, size_t depth) {
@@ -127,14 +122,15 @@ struct ray_tracer {
     if (hit(r, 0.001, INFINITY, rec)) {
       ray scattered;
       color attenuation;
+      color emitted = rec.mat->emitted(rec.u, rec.v, rec.p);
       if (rec.mat->scatter(r, rec, attenuation, scattered)) {
         fire_ray(scattered, c, depth - 1);
-        c *= attenuation;
+        c = emitted + attenuation * c;
       } else {
-        c = color(0, 0, 0);
+        c = emitted;
       }
     } else {
-      c = background_color(r);
+      c = background;
     }
     if (auto ss = camera.screen_space(r.origin() + r.direction(),
                                       vec2(image_width, image_height))) {

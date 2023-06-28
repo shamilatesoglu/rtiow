@@ -109,10 +109,11 @@ void setup_scene(ray_tracer& rt, scene scene) {
       rt.add_object(
         std::make_shared<plane>(point3(0, 0, 0), vec3(0, 1, 0), ground_mat));
       scatter_objects(rt);
+      rt.background = color(0.5, 0.7, 1.0);
       break;
     }
     case scene::earth_sphere: {
-      rt.camera = camera(90, g_aspect_ratio, 0.0, 10, point3(6, 4, 3), 0, 1);
+      rt.camera = camera(90, g_aspect_ratio, 0.0, 10, point3(13, 3, 6), 0, 1);
       rt.camera.look_at(vec3(0, 2, 0));
       auto ground_mat =
         std::make_shared<lambertian>(std::make_shared<plane_checker_texture>(
@@ -123,6 +124,11 @@ void setup_scene(ray_tracer& rt, scene scene) {
         point3(0, 2, 0), 2.0,
         std::make_shared<lambertian>(std::make_shared<image_texture>(
           ".png", earth_topo_png, sizeof(earth_topo_png)))));
+
+      // Add light
+      rt.add_object(std::make_shared<xy_rect>(
+        3, 5, 1, 3, -2, std::make_shared<diffuse_light>(color(4, 4, 4))));
+      rt.background = color(0, 0, 0);
       break;
     }
     case scene::cornell_box: {
@@ -158,7 +164,7 @@ int main(int argc, char** argv) {
   rt.build_bvh();
 
   // Scene
-  scene selected_scene = scene::earth_sphere, current_scene;
+  scene selected_scene = scene::random_spheres, current_scene;
   setup_scene(rt, current_scene = selected_scene);
 
   thread_pool pool(thread_count);

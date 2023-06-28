@@ -3,7 +3,6 @@
 #include "aabb.h"
 #include "material.h"
 
-
 struct hittable {
   virtual ~hittable() = default;
   hittable() = default;
@@ -72,4 +71,18 @@ struct plane : public hittable {
 
   point3 center;
   vec3 normal;
+};
+
+struct xy_rect : public hittable {
+  xy_rect(real_t x0, real_t x1, real_t y0, real_t y1, real_t k,
+          std::shared_ptr<material> mat)
+      : hittable(mat), x0(x0), x1(x1), y0(y0), y1(y1), k(k) {}
+
+  virtual bool hit(const ray& r, real_t t_min, real_t t_max,
+                   hit_record& rec) const override;
+
+  virtual bool bounding_box(real_t time0, real_t time1,
+                            aabb& out) const override;
+
+  real_t x0, x1, y0, y1, k;
 };
