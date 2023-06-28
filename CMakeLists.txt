@@ -5,6 +5,9 @@ project(rtiow)
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
 # Dependencies
+# ------------
+
+# raylib
 add_subdirectory(third_party/raylib)
 add_library(raygui INTERFACE)
 target_include_directories(raygui INTERFACE third_party/raygui/src)

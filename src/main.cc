@@ -7,22 +7,28 @@
 #include "bvh.h"
 #include "camera.h"
 #include "draw.h"
+#include "image_texture.h"
 #include "object.h"
 #include "ray.h"
 #include "ray_tracer.h"
 #include "raylib.h"
+#include "res/earth_topo.png.h"
 #include "stopwatch.h"
 #include "thread_pool.h"
 #include "vec.h"
 
+// stl
+#include <memory>
+
 // globals
-static size_t g_image_width = 800;
-static size_t g_image_height = 600;
+static size_t g_image_width = 1280;
+static size_t g_image_height = 720;
 auto g_aspect_ratio = static_cast<real_t>(g_image_width) / g_image_height;
 auto g_pixel_count = g_image_width * g_image_height;
 
 enum class scene : int {
   random_spheres = 0,
+  earth_sphere,
   cornell_box
 };
 
@@ -105,6 +111,20 @@ void setup_scene(ray_tracer& rt, scene scene) {
       scatter_objects(rt);
       break;
     }
+    case scene::earth_sphere: {
+      rt.camera = camera(90, g_aspect_ratio, 0.0, 10, point3(6, 4, 3), 0, 1);
+      rt.camera.look_at(vec3(0, 2, 0));
+      auto ground_mat =
+        std::make_shared<lambertian>(std::make_shared<plane_checker_texture>(
+          color(0, 0, 0), color(1, 1, 1)));
+      rt.add_object(
+        std::make_shared<plane>(point3(0, 0, 0), vec3(0, 1, 0), ground_mat));
+      rt.add_object(std::make_shared<sphere>(
+        point3(0, 2, 0), 2.0,
+        std::make_shared<lambertian>(std::make_shared<image_texture>(
+          ".png", earth_topo_png, sizeof(earth_topo_png)))));
+      break;
+    }
     case scene::cornell_box: {
       break;
     }
@@ -138,7 +158,7 @@ int main(int argc, char** argv) {
   rt.build_bvh();
 
   // Scene
-  scene selected_scene = scene::random_spheres, current_scene;
+  scene selected_scene = scene::earth_sphere, current_scene;
   setup_scene(rt, current_scene = selected_scene);
 
   thread_pool pool(thread_count);
@@ -251,7 +271,7 @@ int main(int argc, char** argv) {
     GuiLabel(Rectangle{5, 20, 150, 20}, perf_str);
 
     // Scene selector (top middle)
-    const char* scene_str = "Random Spheres;Cornell Box";
+    const char* scene_str = "Random Spheres;Earth;Cornell Box";
     GuiComboBox(Rectangle{(g_image_width / 2.f) - 100, 0, 200, 20}, scene_str,
                 reinterpret_cast<int*>(&selected_scene));
     if (current_scene != selected_scene) {

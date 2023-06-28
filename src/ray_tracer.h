@@ -12,6 +12,7 @@
 // stl
 #include <iostream>
 #include <memory>
+#include <shared_mutex>
 #include <unordered_set>
 #include <vector>
 
@@ -35,17 +36,22 @@ struct ray_tracer {
   }
 
   void add_object(std::shared_ptr<hittable> obj) {
+    std::unique_lock lock(objects_mutex);
     objects.emplace_back(std::move(obj));
   }
 
   void clear_objects() {
+    std::unique_lock lock(objects_mutex);
     objects.clear();
     bvh_root.reset();
   }
 
   void build_bvh() {
     stopwatch sw;
-    bvh_root = bvh_node::build(objects, 0, 1);
+    {
+      std::unique_lock lock(objects_mutex);
+      bvh_root = bvh_node::build(objects, 0, 1);
+    }
     std::cout << "BVH build time: " << sw.elapsed() << "s\n";
   }
 
@@ -143,11 +149,14 @@ struct ray_tracer {
     hit_record cur_rec;
     bool hit_anything = false;
     auto closest_so_far = t_max;
-    for (const auto& obj : objects) {
-      if (obj->hit(r, t_min, closest_so_far, cur_rec)) {
-        hit_anything = true;
-        closest_so_far = cur_rec.t;
-        rec = cur_rec;
+    {
+      std::shared_lock lock(objects_mutex);
+      for (const auto& obj : objects) {
+        if (obj->hit(r, t_min, closest_so_far, cur_rec)) {
+          hit_anything = true;
+          closest_so_far = cur_rec.t;
+          rec = cur_rec;
+        }
       }
     }
     return hit_anything;
@@ -159,5 +168,6 @@ struct ray_tracer {
   size_t image_height;
   real_t pixel_width;
   real_t pixel_height;
+  std::shared_mutex objects_mutex;
   std::vector<std::shared_ptr<hittable>> objects;
 };
