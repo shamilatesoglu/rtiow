@@ -15,6 +15,8 @@ struct hittable {
 
   virtual bool bounding_box(real_t time0, real_t time1, aabb& out) const = 0;
 
+  virtual class bvh_node* as_bvh_node() { return nullptr; }
+
   std::shared_ptr<material> mat = nullptr;
 };
 

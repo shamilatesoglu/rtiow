@@ -6,184 +6,14 @@
 #include "aabb.h"
 #include "bvh.h"
 #include "camera.h"
+#include "draw.h"
 #include "object.h"
 #include "ray.h"
+#include "ray_tracer.h"
 #include "raylib.h"
 #include "stopwatch.h"
 #include "thread_pool.h"
 #include "vec.h"
-
-color real_to_screen(const color& c) {
-  return 255.999 * c;
-}
-
-color read_pixel(const Image& image, int x, int y) {
-  Color c = GetImageColor(image, x, y);
-  return color(c.r, c.g, c.b) / 255.999;
-}
-
-void write_pixel(Image& image, int x, int y, const color& c) {
-  auto sc = real_to_screen(c);
-  auto ir = static_cast<uint8_t>(sc.x());
-  auto ig = static_cast<uint8_t>(sc.y());
-  auto ib = static_cast<uint8_t>(sc.z());
-  Color color = {ir, ig, ib, 255};
-  ImageDrawPixel(&image, x, y, color);
-}
-
-struct ray_tracer {
-  ray_tracer(const class camera& cam, size_t sample_count, size_t max_depth,
-             size_t image_width, size_t image_height)
-      : sample_count(sample_count),
-        max_depth(max_depth),
-        camera(cam),
-        image_width(image_width),
-        image_height(image_height) {
-    pixel_width = 1.0 / image_width;
-    pixel_height = 1.0 / image_height;
-  }
-
-  void add_object(std::shared_ptr<hittable> obj) {
-    objects.emplace_back(std::move(obj));
-  }
-
-  void clear_objects() { objects.clear(); }
-
-  void build_bvh() {
-    stopwatch sw;
-    bvh_root = std::make_shared<bvh_node>(objects, 0, objects.size(), 0, 1);
-    std::cout << "BVH build time: " << sw.elapsed() << "s\n";
-    objects.clear();
-    objects.emplace_back(bvh_root);
-  }
-
-  color compute(real_t u, real_t v) {
-    color c;
-    for (int i = 0; i < sample_count; ++i) {
-      real_t up = u + random_real() * pixel_width;
-      real_t vp = v + random_real() * pixel_height;
-      color sample_color;
-      ray r = camera.ray_to(up, vp);
-      fire_ray(r, sample_color, max_depth);
-      c += sample_color;
-    }
-    return c / sample_count;
-  }
-
-  color background_color(const ray& r) {
-    vec3 unit_direction = r.direction().normalized();
-    auto t = 0.5 * (unit_direction.y() + 1.0);
-    return (1.0 - t) * color(1.0, 1.0, 1.0) + t * color(0.5, 0.7, 1.0);
-  }
-
-  size_t sample_count;
-  size_t max_depth;
-  std::shared_ptr<bvh_node> bvh_root;
-
- protected:
-  void fire_ray(const ray& r, color& c, size_t depth) {
-    if (depth <= 0) {
-      c = color(0, 0, 0);
-      return;
-    }
-    hit_record rec;
-    if (bvh_root->hit(r, 0.001, INFINITY, rec)) {
-      ray scattered;
-      color attenuation;
-      if (rec.mat->scatter(r, rec, attenuation, scattered)) {
-        fire_ray(scattered, c, depth - 1);
-        c *= attenuation;
-      } else {
-        c = color(0, 0, 0);
-      }
-    } else {
-      c = background_color(r);
-    }
-  }
-
-  bool hit(const ray& r, real_t t_min, real_t t_max, hit_record& rec) const {
-    hit_record temp_rec;
-    bool hit_anything = false;
-    auto closest_so_far = t_max;
-    for (const auto& obj : objects) {
-      if (obj->hit(r, t_min, closest_so_far, temp_rec)) {
-        hit_anything = true;
-        closest_so_far = temp_rec.t;
-        rec = temp_rec;
-      }
-    }
-    return hit_anything;
-  }
-
-  const camera& camera;
-  size_t image_width;
-  size_t image_height;
-  real_t pixel_width;
-  real_t pixel_height;
-  std::vector<std::shared_ptr<hittable>> objects;
-};
-
-void draw_line(Image& img, const point2& p0, const point2& p1, const color& c) {
-  // Draw line to image
-  Color color = {static_cast<uint8_t>(c.x() * 255.999),
-                 static_cast<uint8_t>(c.y() * 255.999),
-                 static_cast<uint8_t>(c.z() * 255.999), 255};
-  ImageDrawLine(&img, p0.x(), p0.y(), p1.x(), p1.y(), color);
-}
-
-void draw_aabb(Image& img, const aabb& box, const camera& cam, const color& c) {
-  auto p0 = box.min;
-  auto p1 = point3(box.max.x(), box.min.y(), box.min.z());
-  auto p2 = point3(box.max.x(), box.max.y(), box.min.z());
-  auto p3 = point3(box.min.x(), box.max.y(), box.min.z());
-  auto p4 = point3(box.min.x(), box.min.y(), box.max.z());
-  auto p5 = point3(box.max.x(), box.min.y(), box.max.z());
-  auto p6 = box.max;
-  auto p7 = point3(box.min.x(), box.max.y(), box.max.z());
-
-  std::vector<point3> points = {p0, p1, p2, p3, p4, p5, p6, p7};
-  std::vector<point2> points2d(points.size());
-  bool any_behind = false;
-  for (size_t i = 0; i < points.size(); ++i) {
-    auto p = cam.screen_space(points[i], vec2(img.width, img.height));
-    if (!p) {
-      any_behind = true;
-      break;
-    }
-    points2d[i] = *p;
-  }
-  if (any_behind) {
-    return;
-  }
-  // Draw box
-  draw_line(img, points2d[0], points2d[1], c);
-  draw_line(img, points2d[1], points2d[2], c);
-  draw_line(img, points2d[2], points2d[3], c);
-  draw_line(img, points2d[3], points2d[0], c);
-  draw_line(img, points2d[4], points2d[5], c);
-  draw_line(img, points2d[5], points2d[6], c);
-  draw_line(img, points2d[6], points2d[7], c);
-  draw_line(img, points2d[7], points2d[4], c);
-  draw_line(img, points2d[0], points2d[4], c);
-  draw_line(img, points2d[1], points2d[5], c);
-  draw_line(img, points2d[2], points2d[6], c);
-  draw_line(img, points2d[3], points2d[7], c);
-}
-
-void draw_bvh(Image& img, bvh_node* root, const camera& cam, size_t depth = 0) {
-  auto bvh_box_color = color(0, 1, 0) * (depth + 1) / 10;
-  color bvh_leaf_color(1, 0, 0);
-  while (root) {
-    if (root->leaf) {
-      draw_aabb(img, root->box, cam, bvh_leaf_color);
-    } else {
-      draw_aabb(img, root->box, cam, bvh_box_color);
-      draw_bvh(img, dynamic_cast<bvh_node*>(root->left.get()), cam, depth + 1);
-      draw_bvh(img, dynamic_cast<bvh_node*>(root->right.get()), cam, depth + 1);
-    }
-    break;
-  }
-}
 
 void scatter_objects(ray_tracer& tracer) {
   std::vector<std::shared_ptr<hittable>> objects;
@@ -200,7 +30,7 @@ void scatter_objects(ray_tracer& tracer) {
   objects.emplace_back(
     std::make_shared<sphere>(point3(4, 1, 0), 1.0, material3));
 
-  for (size_t i = 0; i < 100;) {
+  for (size_t i = 0; i < 800;) {
     auto choose_mat = random_real();
     auto radius = random_real(0.05, 0.25);
     auto center = vec3(random_real(-10, 10), radius, random_real(-10, 10));
@@ -251,7 +81,7 @@ void scatter_objects(ray_tracer& tracer) {
 }
 
 int main(int argc, char** argv) {
-  uint32_t thread_count = std::thread::hardware_concurrency();
+  uint32_t thread_count = std::thread::hardware_concurrency() - 1;
   size_t image_width = 800;
   size_t image_height = 450;
 
@@ -276,15 +106,15 @@ int main(int argc, char** argv) {
 
   auto ground_mat = std::make_shared<lambertian>(color(0.5, 0.5, 0.5));
 
-  camera cam(90, aspect_ratio, 0.1, 10, point3(13, 2, 3), 0, 1);
+  camera cam(90, aspect_ratio, 0.0, 10, point3(13, 2, 3), 0, 1);
   cam.look_at(vec3(0, 0, 0));
 
-  ray_tracer tracer(cam, 4, 50, image_width, image_height);
+  ray_tracer tracer(cam, 1, 50, image_width, image_height);
   tracer.add_object(
     std::make_shared<plane>(point3(0, 0, 0), vec3(0, 1, 0), ground_mat));
   scatter_objects(tracer);
 
-  tracer.build_bvh();
+  //tracer.build_bvh();
 
   thread_pool pool(thread_count);
 
@@ -311,11 +141,7 @@ int main(int argc, char** argv) {
         while (!done) {
           for (size_t i = start; i < end; ++i) {
             for (size_t j = 0; j < image.height; ++j) {
-              real_t u = static_cast<real_t>(i) / (image.width - 1);
-              real_t v = static_cast<real_t>(j) / (image.height - 1);
-              v = 1.0 - v;
-              auto c = tracer.compute(u, v);
-              write_pixel(image, i, j, c);
+              tracer.render_pixel(image, i, j);
               if (progress.fetch_add(1, std::memory_order_relaxed) ==
                   pixel_count - 1) {
                 rt_frame_time = rt_sw.elapsed();
@@ -338,7 +164,7 @@ int main(int argc, char** argv) {
   });
 
   bool debug = false;
-  bool lock_cam = true;
+  bool lock_cam = false;
   real_t render_fps = 0;
   char filename[256] = "render.png";
   bool editing_filename = false;
@@ -373,7 +199,7 @@ int main(int argc, char** argv) {
       debug = !debug;
     }
     if (debug) {
-      draw_bvh(image, tracer.bvh_root.get(), cam);
+      draw_bvh(image, tracer.bvh_root.get(), tracer, 0);
     }
     UpdateTexture(tex, image.data);
     DrawTexture(tex, 0, 0, WHITE);
@@ -415,8 +241,11 @@ int main(int argc, char** argv) {
 
     // Image settings
     const float img_settings_start = cam_settings_end;
+    const char* mode_str = "Color;Normal;Depth";
+    GuiComboBox(Rectangle{5, img_settings_start, 150, 20}, mode_str,
+                reinterpret_cast<int*>(&tracer.mode));
     // Write to disk
-    Rectangle filename_textbox_bounds = {5, img_settings_start, 150, 20};
+    Rectangle filename_textbox_bounds = {5, img_settings_start + 25, 150, 20};
     if (CheckCollisionPointRec(GetMousePosition(), filename_textbox_bounds) &&
         IsMouseButtonPressed(MOUSE_LEFT_BUTTON)) {
       editing_filename = true;
@@ -427,17 +256,17 @@ int main(int argc, char** argv) {
       editing_filename = false;
     }
     GuiTextBox(filename_textbox_bounds, filename, 256, editing_filename);
-    if (GuiButton(Rectangle{5, img_settings_start + 25, 150, 20}, "Export")) {
+    if (GuiButton(Rectangle{5, img_settings_start + 50, 150, 20}, "Export")) {
       ExportImage(image, filename);
     }
     // Reset image
-    if (GuiButton(Rectangle{5, img_settings_start + 50, 150, 20}, "Reset")) {
+    if (GuiButton(Rectangle{5, img_settings_start + 75, 150, 20}, "Reset")) {
       pool.cancel();
       for (size_t i = 0; i < image.width * image.height; ++i) {
         write_pixel(image, i % image.width, i / image.width, color(0, 0, 0));
       }
     }
-    if (GuiButton(Rectangle{5, img_settings_start + 75, 150, 20},
+    if (GuiButton(Rectangle{5, img_settings_start + 100, 150, 20},
                   suspend ? "Resume" : "Suspend")) {
       suspend = !suspend;
     }
@@ -445,8 +274,7 @@ int main(int argc, char** argv) {
       // With red text
       int old_color = GuiGetStyle(LABEL, TEXT_COLOR_NORMAL);
       GuiSetStyle(LABEL, TEXT_COLOR_NORMAL, 0xffff0000);
-      GuiLabel(Rectangle{5, img_settings_start + 100, 150, 20},
-               TextFormat("DEBUG"));
+      GuiLabel(Rectangle{5, image.height - 20.f, 150, 20}, TextFormat("DEBUG"));
       GuiSetStyle(LABEL, TEXT_COLOR_NORMAL, old_color);
     }
 

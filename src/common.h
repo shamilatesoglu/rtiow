@@ -42,3 +42,7 @@ inline real_t clamp(real_t x, real_t min, real_t max) {
   }
   return x;
 }
+
+inline real_t lerp(real_t t, real_t a, real_t b) {
+  return (1.0 - t) * a + t * b;
+}

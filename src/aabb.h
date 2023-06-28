@@ -34,17 +34,37 @@ struct aabb {
     return d.x() * d.y() * d.z();
   }
 
+  aabb intersect(const aabb& other) const {
+    point3 small(fmax(min.x(), other.min.x()), fmax(min.y(), other.min.y()),
+                 fmax(min.z(), other.min.z()));
+
+    point3 big(fmin(max.x(), other.max.x()), fmin(max.y(), other.max.y()),
+               fmin(max.z(), other.max.z()));
+
+    return aabb(small, big);
+  }
+
+  real_t distance_sq(const aabb& other) const {
+    aabb intersection = intersect(other);
+    real_t d_sq = 0.0;
+    for (int i = 0; i < 3; i++) {
+        if (intersection.min[i] > intersection.max[i]) {
+            d_sq += (intersection.min[i] - intersection.max[i]) * (intersection.min[i] - intersection.max[i]);
+        }
+    }
+    return d_sq;
+  }
+
+  aabb surrounding(const aabb& other) const {
+    point3 small(fmin(min.x(), other.min.x()), fmin(min.y(), other.min.y()),
+                 fmin(min.z(), other.min.z()));
+
+    point3 big(fmax(max.x(), other.max.x()), fmax(max.y(), other.max.y()),
+               fmax(max.z(), other.max.z()));
+
+    return aabb(small, big);
+  }
+
   point3 min;
   point3 max;
 };
-
-inline aabb surrounding_box(aabb box0, aabb box1) {
-  point3 small(fmin(box0.min.x(), box1.min.x()),
-               fmin(box0.min.y(), box1.min.y()),
-               fmin(box0.min.z(), box1.min.z()));
-
-  point3 big(fmax(box0.max.x(), box1.max.x()), fmax(box0.max.y(), box1.max.y()),
-             fmax(box0.max.z(), box1.max.z()));
-
-  return aabb(small, big);
-}
