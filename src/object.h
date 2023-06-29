@@ -2,6 +2,11 @@
 
 #include "aabb.h"
 #include "material.h"
+#include "stopwatch.h"
+
+// stl
+#include <iostream>
+#include <shared_mutex>
 
 struct hittable {
   virtual ~hittable() = default;
@@ -17,6 +22,41 @@ struct hittable {
   virtual class bvh_node* as_bvh_node() { return nullptr; }
 
   std::shared_ptr<material> mat = nullptr;
+};
+
+struct hittable_list : public hittable {
+
+  virtual bool hit(const ray& r, real_t t_min, real_t t_max,
+                   hit_record& rec) const override {
+    hit_record cur_rec;
+    bool hit_anything = false;
+    auto closest_so_far = t_max;
+    for (const auto& obj : objects) {
+      if (obj->hit(r, t_min, closest_so_far, cur_rec)) {
+        hit_anything = true;
+        closest_so_far = cur_rec.t;
+        rec = cur_rec;
+      }
+    }
+    return hit_anything;
+  }
+
+  virtual bool bounding_box(double time0, double time1,
+                            aabb& output_box) const override;
+
+  void add_object(std::shared_ptr<hittable> obj) {
+    objects.emplace_back(std::move(obj));
+  }
+
+  void clear_objects() {
+    objects.clear();
+    bvh_root.reset();
+  }
+
+  void build_bvh();
+
+  std::shared_ptr<struct bvh_node> bvh_root;
+  std::vector<std::shared_ptr<hittable>> objects;
 };
 
 struct sphere : public hittable {
@@ -85,4 +125,102 @@ struct xy_rect : public hittable {
                             aabb& out) const override;
 
   real_t x0, x1, y0, y1, k;
+};
+
+struct xz_rect : public hittable {
+  xz_rect(real_t x0, real_t x1, real_t z0, real_t z1, real_t k,
+          std::shared_ptr<material> mat)
+      : hittable(mat), x0(x0), x1(x1), z0(z0), z1(z1), k(k) {}
+
+  virtual bool hit(const ray& r, real_t t_min, real_t t_max,
+                   hit_record& rec) const override;
+
+  virtual bool bounding_box(real_t time0, real_t time1,
+                            aabb& out) const override;
+
+  real_t x0, x1, z0, z1, k;
+};
+
+struct yz_rect : public hittable {
+  yz_rect(real_t y0, real_t y1, real_t z0, real_t z1, real_t k,
+          std::shared_ptr<material> mat)
+      : hittable(mat), y0(y0), y1(y1), z0(z0), z1(z1), k(k) {}
+
+  virtual bool hit(const ray& r, real_t t_min, real_t t_max,
+                   hit_record& rec) const override;
+
+  virtual bool bounding_box(real_t time0, real_t time1,
+                            aabb& out) const override;
+
+  real_t y0, y1, z0, z1, k;
+};
+
+struct box : public hittable {
+  box(point3 p0, point3 p1, std::shared_ptr<material> mat)
+      : hittable(mat), p0(p0), p1(p1) {
+    sides.add_object(
+      std::make_shared<xy_rect>(p0.x(), p1.x(), p0.y(), p1.y(), p1.z(), mat));
+    sides.add_object(
+      std::make_shared<xy_rect>(p0.x(), p1.x(), p0.y(), p1.y(), p0.z(), mat));
+    sides.add_object(
+      std::make_shared<xy_rect>(p0.x(), p1.x(), p0.y(), p1.y(), p1.z(), mat));
+    sides.add_object(
+      std::make_shared<xy_rect>(p0.x(), p1.x(), p0.y(), p1.y(), p0.z(), mat));
+    sides.add_object(
+      std::make_shared<xz_rect>(p0.x(), p1.x(), p0.z(), p1.z(), p1.y(), mat));
+    sides.add_object(
+      std::make_shared<xz_rect>(p0.x(), p1.x(), p0.z(), p1.z(), p0.y(), mat));
+    sides.add_object(
+      std::make_shared<yz_rect>(p0.y(), p1.y(), p0.z(), p1.z(), p1.x(), mat));
+    sides.add_object(
+      std::make_shared<yz_rect>(p0.y(), p1.y(), p0.z(), p1.z(), p0.x(), mat));
+  }
+
+  virtual bool hit(const ray& r, real_t t_min, real_t t_max,
+                   hit_record& rec) const override {
+    return sides.hit(r, t_min, t_max, rec);
+  }
+
+  virtual bool bounding_box(real_t time0, real_t time1,
+                            aabb& out) const override {
+    out = aabb(p0, p1);
+    return true;
+  }
+
+  point3 p0, p1;
+  hittable_list sides;
+};
+
+struct translate : public hittable {
+  translate(std::shared_ptr<hittable> p, const vec3& displacement)
+      : hittable(p->mat), ptr(p), offset(displacement) {}
+
+  virtual bool hit(const ray& r, real_t t_min, real_t t_max,
+                   hit_record& rec) const override;
+
+  virtual bool bounding_box(real_t time0, real_t time1,
+                            aabb& out) const override;
+
+  virtual class bvh_node* as_bvh_node() override { return ptr->as_bvh_node(); }
+
+  std::shared_ptr<hittable> ptr;
+  vec3 offset;
+};
+
+struct rotate_y : public hittable {
+  rotate_y(std::shared_ptr<hittable> p, real_t angle);
+
+  virtual bool hit(const ray& r, real_t t_min, real_t t_max,
+                   hit_record& rec) const override;
+
+  virtual bool bounding_box(real_t time0, real_t time1,
+                            aabb& out) const override;
+
+  virtual class bvh_node* as_bvh_node() override { return ptr->as_bvh_node(); }
+
+  std::shared_ptr<hittable> ptr;
+  real_t sin_theta;
+  real_t cos_theta;
+  bool has_box;
+  aabb bbox;
 };

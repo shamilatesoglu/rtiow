@@ -117,6 +117,18 @@ struct vec3 {
     return (fabs(e[0]) < s) && (fabs(e[1]) < s) && (fabs(e[2]) < s);
   }
 
+  void clamp(real_t min, real_t max) {
+    e[0] = std::clamp(e[0], min, max);
+    e[1] = std::clamp(e[1], min, max);
+    e[2] = std::clamp(e[2], min, max);
+  }
+
+  void clamp(const vec3& min, const vec3& max) {
+    e[0] = std::clamp(e[0], min[0], max[0]);
+    e[1] = std::clamp(e[1], min[1], max[1]);
+    e[2] = std::clamp(e[2], min[2], max[2]);
+  }
+
   static vec3 random();
   static vec3 random(real_t min, real_t max);
 

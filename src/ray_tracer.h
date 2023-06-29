@@ -35,26 +35,6 @@ struct ray_tracer {
     hit_recs.resize(image_width * image_height);
   }
 
-  void add_object(std::shared_ptr<hittable> obj) {
-    std::unique_lock lock(objects_mutex);
-    objects.emplace_back(std::move(obj));
-  }
-
-  void clear_objects() {
-    std::unique_lock lock(objects_mutex);
-    objects.clear();
-    bvh_root.reset();
-  }
-
-  void build_bvh() {
-    stopwatch sw;
-    {
-      std::unique_lock lock(objects_mutex);
-      bvh_root = bvh_node::build(objects, 0, 1);
-    }
-    std::cout << "BVH build time: " << sw.elapsed() << "s\n";
-  }
-
   color compute(real_t u, real_t v) {
     color c;
     for (int i = 0; i < sample_count; ++i) {
@@ -65,9 +45,11 @@ struct ray_tracer {
       fire_ray(r, sample_color, max_depth);
       c += sample_color;
     }
-    c.x() = pow(c.x() / sample_count, 1.0 / 2.2);
-    c.y() = pow(c.y() / sample_count, 1.0 / 2.2);
-    c.z() = pow(c.z() / sample_count, 1.0 / 2.2);
+    c /= sample_count;
+    c.x() = pow(c.x(), 1.0 / 2.2);
+    c.y() = pow(c.y(), 1.0 / 2.2);
+    c.z() = pow(c.z(), 1.0 / 2.2);
+    c.clamp(0.0, 1.0);
     return c;
   }
 
@@ -109,8 +91,8 @@ struct ray_tracer {
   size_t sample_count;
   size_t max_depth;
   camera camera;
-  std::shared_ptr<bvh_node> bvh_root;
   color background;
+  hittable_list world;
 
  protected:
   void fire_ray(const ray& r, color& c, size_t depth) {
@@ -119,7 +101,7 @@ struct ray_tracer {
       return;
     }
     hit_record rec = {};
-    if (hit(r, 0.001, INFINITY, rec)) {
+    if (world.hit(r, 0.001, INFINITY, rec)) {
       ray scattered;
       color attenuation;
       color emitted = rec.mat->emitted(rec.u, rec.v, rec.p);
@@ -141,29 +123,10 @@ struct ray_tracer {
     }
   }
 
-  bool hit(const ray& r, real_t t_min, real_t t_max, hit_record& rec) {
-    hit_record cur_rec;
-    bool hit_anything = false;
-    auto closest_so_far = t_max;
-    {
-      std::shared_lock lock(objects_mutex);
-      for (const auto& obj : objects) {
-        if (obj->hit(r, t_min, closest_so_far, cur_rec)) {
-          hit_anything = true;
-          closest_so_far = cur_rec.t;
-          rec = cur_rec;
-        }
-      }
-    }
-    return hit_anything;
-  }
-
   std::vector<hit_record> hit_recs;
 
   size_t image_width;
   size_t image_height;
   real_t pixel_width;
   real_t pixel_height;
-  std::shared_mutex objects_mutex;
-  std::vector<std::shared_ptr<hittable>> objects;
 };
