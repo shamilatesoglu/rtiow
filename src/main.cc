@@ -113,7 +113,7 @@ void setup_scene(ray_tracer& rt, scene scene) {
       break;
     }
     case scene::earth_sphere: {
-      rt.camera = camera(90, g_aspect_ratio, 0.0, 10, point3(13, 3, 6), 0, 1);
+      rt.camera = camera(90, g_aspect_ratio, 0.0, 10, point3(0, 3, -10), 0, 1);
       rt.camera.look_at(vec3(0, 2, 0));
       auto ground_mat =
         std::make_shared<lambertian>(std::make_shared<plane_checker_texture>(
@@ -121,18 +121,21 @@ void setup_scene(ray_tracer& rt, scene scene) {
       rt.world.add_object(
         std::make_shared<plane>(point3(0, 0, 0), vec3(0, 1, 0), ground_mat));
       rt.world.add_object(std::make_shared<sphere>(
-        point3(0, 2, 0), 2.0,
-        std::make_shared<lambertian>(std::make_shared<image_texture>(
-          ".png", earth_topo_png, sizeof(earth_topo_png)))));
+          point3(4, 2, 0), 2.0,
+          std::make_shared<lambertian>(std::make_shared<image_texture>(
+              ".png", earth_topo_png, sizeof(earth_topo_png)))));
+      rt.world.add_object(std::make_shared<sphere>(
+          point3(-2, 2, 1), 1.25,
+          std::make_shared<glass>(color(1, 1, 1), 1.5)));
       // Add light
-      rt.world.add_object(std::make_shared<xy_rect>(
-        3, 5, 1, 3, -2, std::make_shared<diffuse_light>(color(4, 4, 4))));
+      rt.world.add_object(std::make_shared<xz_rect>(
+        -1, 1, -1, 1, 6, std::make_shared<diffuse_light>(color(16, 16, 16))));
       rt.background = color(0, 0, 0);
       break;
     }
     case scene::cornell_box: {
       rt.camera =
-        camera(60, g_aspect_ratio, 0.0, 10, point3(278, 278, -860), 0, 1);
+        camera(60, g_aspect_ratio, 0.0, 10, point3(278, 278, -880), 0, 1);
       rt.background = color(0, 0, 0);
       auto red = std::make_shared<lambertian>(color(0.65, 0.05, 0.05));
       auto white = std::make_shared<lambertian>(color(0.73, 0.73, 0.73));
@@ -185,13 +188,13 @@ int main(int argc, char** argv) {
   Texture2D tex = LoadTextureFromImage(image);
 
   // Ray tracer
-  ray_tracer rt(camera(90, g_aspect_ratio, 0.0, 10, point3(0, 0, 0), 0, 1), 1,
+  ray_tracer rt(camera(90, g_aspect_ratio, 0.0, 10, point3(0, 0, 0), 0, 1), 4,
                 50, g_image_width, g_image_height);
   rt.camera.look_at(vec3(0, 0, -1));
   rt.world.build_bvh();
 
   // Scene
-  scene selected_scene = scene::random_spheres, current_scene;
+  scene selected_scene = scene::earth_sphere, current_scene;
   setup_scene(rt, current_scene = selected_scene);
 
   thread_pool pool(thread_count);
@@ -310,11 +313,16 @@ int main(int argc, char** argv) {
 
       // Scene selector (top middle)
       const char* scene_str = "Random Spheres;Earth;Cornell Box";
-      GuiComboBox(Rectangle{(g_image_width / 2.f) - 100, 0, 200, 20}, scene_str,
+      static const Rectangle scene_selector_rect = {(g_image_width / 2.f) - 100,
+                                                    0, 200, 20};
+      if (!suspend)
+        GuiDisable();
+      GuiComboBox(scene_selector_rect, scene_str,
                   reinterpret_cast<int*>(&selected_scene));
-      if (current_scene != selected_scene) {
+      if (current_scene != selected_scene)
         setup_scene(rt, current_scene = selected_scene);
-      }
+      if (!suspend)
+        GuiEnable();
 
       // Camera position (top right corner)
       GuiLabel(Rectangle{g_image_width - 200.f, 0, 200, 20},
