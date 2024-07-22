@@ -21,10 +21,10 @@
 #include <memory>
 
 // globals
-static size_t g_image_width = 1280;
-static size_t g_image_height = 720;
-auto g_aspect_ratio = static_cast<real_t>(g_image_width) / g_image_height;
-auto g_pixel_count = g_image_width * g_image_height;
+static size_t g_image_width = 1920;
+static size_t g_image_height = 1080;
+real_t g_aspect_ratio;
+size_t g_pixel_count;
 
 enum class scene : int {
   random_spheres = 0,
@@ -135,36 +135,37 @@ void setup_scene(ray_tracer& rt, scene scene) {
     }
     case scene::cornell_box: {
       rt.camera =
-        camera(60, g_aspect_ratio, 0.0, 10, point3(278, 278, -880), 0, 1);
+        camera(60, g_aspect_ratio, 0.0, 10, point3(2.78, 2.78, -8.80), 0, 1);
       rt.background = color(0, 0, 0);
       auto red = std::make_shared<lambertian>(color(0.65, 0.05, 0.05));
       auto white = std::make_shared<lambertian>(color(0.73, 0.73, 0.73));
       auto green = std::make_shared<lambertian>(color(0.12, 0.45, 0.15));
       auto light = std::make_shared<diffuse_light>(color(15, 15, 15));
       rt.world.add_object(
-        std::make_shared<yz_rect>(0, 555, 0, 555, 555, green));
-      rt.world.add_object(std::make_shared<yz_rect>(0, 555, 0, 555, 0, red));
+        std::make_shared<yz_rect>(0, 5.55, 0, 5.55, 5.55, green));
+      rt.world.add_object(std::make_shared<yz_rect>(0, 5.55, 0, 5.55, 0, red));
       rt.world.add_object(
-        std::make_shared<xz_rect>(213, 343, 227, 332, 554, light));
-      rt.world.add_object(std::make_shared<xz_rect>(0, 555, 0, 555, 0, white));
+        std::make_shared<xz_rect>(2.13, 3.43, 2.27, 3.32, 5.54, light));
+      rt.world.add_object(std::make_shared<xz_rect>(0, 5.55, 0, 5.55, 0, white));
       rt.world.add_object(
-        std::make_shared<xz_rect>(0, 555, 0, 555, 555, white));
+        std::make_shared<xz_rect>(0, 5.55, 0, 5.55, 5.55, white));
       rt.world.add_object(
-        std::make_shared<xy_rect>(0, 555, 0, 555, 555, white));
+        std::make_shared<xy_rect>(0, 5.55, 0, 5.55, 5.55, white));
       std::shared_ptr<hittable> box1 =
-        std::make_shared<box>(point3(0, 0, 0), point3(165, 330, 165), white);
+        std::make_shared<box>(point3(0, 0, 0), point3(1.65, 3.30, 1.65), white);
       box1 = std::make_shared<rotate_y>(box1, 15);
-      box1 = std::make_shared<translate>(box1, vec3(265, 0, 295));
+      box1 = std::make_shared<translate>(box1, vec3(2.65, 0, 2.95));
       rt.world.add_object(box1);
       std::shared_ptr<hittable> box2 =
-        std::make_shared<box>(point3(0, 0, 0), point3(165, 165, 165), white);
+        std::make_shared<box>(point3(0, 0, 0), point3(1.65, 1.65, 1.65), white);
       box2 = std::make_shared<rotate_y>(box2, -18);
-      box2 = std::make_shared<translate>(box2, vec3(130, 0, 65));
+      box2 = std::make_shared<translate>(box2, vec3(1.30, 0, .65));
       rt.world.add_object(box2);
-      rt.camera.look_at(vec3(278, 278, 0));
+      rt.camera.look_at(vec3(2.78, 2.78, 0));
       break;
     }
   }
+  rt.world.build_bvh();
 }
 
 int main(int argc, char** argv) {
@@ -191,7 +192,6 @@ int main(int argc, char** argv) {
   ray_tracer rt(camera(90, g_aspect_ratio, 0.0, 10, point3(0, 0, 0), 0, 1), 4,
                 50, g_image_width, g_image_height);
   rt.camera.look_at(vec3(0, 0, -1));
-  rt.world.build_bvh();
 
   // Scene
   scene selected_scene = scene::earth_sphere, current_scene;
@@ -201,18 +201,19 @@ int main(int argc, char** argv) {
 
   bool done = false;
   bool suspend = false;
+  bool accumulate = true;
   real_t rt_frame_time = 0;
   std::atomic_uint progress = 0;
   stopwatch rt_sw;
   auto rt_thread = std::thread([&done, &suspend, &pool, &rt, &image,
-                                &rt_frame_time, &progress, &rt_sw]() {
+                                &rt_frame_time, &progress, &rt_sw, &accumulate]() {
     const size_t segments = pool.pool_size();
     const size_t seg_size = image.width / segments;
     std::cout << "Segments: " << segments << std::endl;
     std::cout << "Segment size: " << seg_size << std::endl;
     for (size_t si = 0; si < segments; ++si) {
       pool.enqueue([&image, si, seg_size, segments, &progress, &rt, &done,
-                    &suspend, &rt_frame_time, &rt_sw]() {
+                    &suspend, &rt_frame_time, &rt_sw, &accumulate]() {
         const size_t start = si * seg_size;
         const size_t end = si == segments - 1 ? image.width : start + seg_size;
         char buf[256];
@@ -265,14 +266,13 @@ int main(int argc, char** argv) {
       if (IsKeyDown(KEY_D))
         move_right += 1;
       real_t move_speed = IsKeyDown(KEY_LEFT_SHIFT) ? 0.1 : 0.01;
-      rt.camera.move(move_right * move_speed, move_front * move_speed);
-
+      real_t dx = 0, dy = 0;
       if (IsMouseButtonDown(MOUSE_RIGHT_BUTTON)) {
         auto delta = GetMouseDelta();
-        real_t dx = delta.x / g_image_width * 2;
-        real_t dy = delta.y / g_image_height * 2;
-        rt.camera.change_direction(dx, dy);
+        dx = delta.x / g_image_width * 2;
+        dy = delta.y / g_image_height * 2;
       }
+      rt.update_camera(move_right * move_speed, move_front * move_speed, dx, dy);
     }
 
     if (IsKeyPressed(KEY_F1)) {
@@ -308,8 +308,8 @@ int main(int argc, char** argv) {
                stopwatch::elapsed_str(rt_frame_time).c_str(),
                stopwatch::elapsed_str(remaining).c_str());
       GuiLabel(Rectangle{5, 0, 280, 20}, perf_str);
-      snprintf(perf_str, sizeof(perf_str), "Render: %.2f FPS", render_fps);
-      GuiLabel(Rectangle{5, 20, 150, 20}, perf_str);
+      snprintf(perf_str, sizeof(perf_str), "Render: %.2f FPS | Frames: %d", render_fps, rt.frame_count.load());
+      GuiLabel(Rectangle{5, 20, 280, 20}, perf_str);
 
       // Scene selector (top middle)
       const char* scene_str = "Random Spheres;Earth;Cornell Box";
@@ -349,16 +349,19 @@ int main(int argc, char** argv) {
       rt.max_depth = static_cast<size_t>(max_depth);
 
       // Camera settings
-      const float cam_settings_start = 95;
-      GuiCheckBox(Rectangle{5, cam_settings_start, 20, 20}, "Lock camera",
-                  &lock_cam);
-      GuiSlider(Rectangle{5, cam_settings_start + 25, 150, 20}, nullptr,
+	  const float cam_settings_start = 95;
+	  GuiCheckBox(Rectangle{ 5, cam_settings_start, 20, 20 }, "Lock camera",
+		  & lock_cam);
+	  GuiCheckBox(Rectangle{ 5, cam_settings_start + 25, 20, 20 }, "Accumulate",
+		  &accumulate);
+	  rt.set_accumulate(accumulate);
+      GuiSlider(Rectangle{5, cam_settings_start + 50, 150, 20}, nullptr,
                 TextFormat("Focus Distance %.2f", rt.camera.focus_distance),
                 &rt.camera.focus_distance, 0.5, 50);
-      GuiSlider(Rectangle{5, cam_settings_start + 50, 150, 20}, nullptr,
+      GuiSlider(Rectangle{5, cam_settings_start + 75, 150, 20}, nullptr,
                 TextFormat("Aperture %.2f", rt.camera.aperture),
                 &rt.camera.aperture, 0.001, 2.0);
-      const float cam_settings_end = cam_settings_start + 75;
+      const float cam_settings_end = cam_settings_start + 100;
 
       // Image settings
       const float img_settings_start = cam_settings_end;

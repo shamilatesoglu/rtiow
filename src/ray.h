@@ -33,7 +33,7 @@ struct hit_record {
   real_t u;
   real_t v;
   bool front_face;
-  std::shared_ptr<material> mat = nullptr;
+  material* mat = nullptr;
 
   inline void set_face_normal(const ray& r, const vec3& outward_normal) {
     front_face = r.direction().dot(outward_normal) < 0;

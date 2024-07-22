@@ -3,7 +3,7 @@
 #include <iostream>
 
 std::shared_ptr<bvh_node> bvh_node::build(
-  std::vector<std::shared_ptr<hittable>>& objects, double time0, double time1) {
+  std::vector<std::shared_ptr<hittable>>& objects, real_t time0, real_t time1) {
   // Build the tree by merging the bounding volumes of the two nearest
   // bounding volumes, until there is only the root node left. If the
   // object's bounding box can not be computed, then it is not included in the tree.
@@ -61,13 +61,13 @@ std::shared_ptr<bvh_node> bvh_node::build(
   return std::make_shared<bvh_node>(left, right, box);
 }
 
-bool bvh_node::bounding_box(double time0, double time1,
+bool bvh_node::bounding_box(real_t time0, real_t time1,
                             aabb& output_box) const {
   output_box = box;
   return true;
 }
 
-bool bvh_node::hit(const ray& r, double t_min, double t_max,
+bool bvh_node::hit(const ray& r, real_t t_min, real_t t_max,
                    hit_record& rec) const {
   if (!box.hit(r, t_min, t_max))
     return false;

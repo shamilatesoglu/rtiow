@@ -23,7 +23,21 @@ void get_plane_uv(const vec3& p, real_t& u, real_t& v) {
   v = p.z();
 }
 
-bool hittable_list::bounding_box(double time0, double time1,
+bool hittable_list::hit(const ray &r, real_t t_min, real_t t_max, hit_record &rec) const {
+  hit_record cur_rec;
+  bool hit_anything = false;
+  auto closest_so_far = t_max;
+  for (const auto& obj : objects) {
+    if (obj->hit(r, t_min, closest_so_far, cur_rec)) {
+      hit_anything = true;
+      closest_so_far = cur_rec.t;
+      rec = cur_rec;
+    }
+  }
+  return hit_anything;
+}
+
+bool hittable_list::bounding_box(real_t time0, real_t time1,
                                  aabb& output_box) const {
   if (objects.empty())
     return false;
@@ -76,7 +90,7 @@ bool sphere::hit(const ray& r, real_t t_min, real_t t_max,
   vec3 outward_normal = (rec.p - S) / radius;
   rec.set_face_normal(r, outward_normal);
   get_sphere_uv(outward_normal, rec.u, rec.v);
-  rec.mat = mat;
+  rec.mat = mat.get();
   return true;
 }
 
@@ -115,7 +129,7 @@ bool moving_sphere::hit(const ray& r, real_t t_min, real_t t_max,
   vec3 outward_normal = (rec.p - S) / radius;
   rec.set_face_normal(r, outward_normal);
   get_sphere_uv(outward_normal, rec.u, rec.v);
-  rec.mat = mat;
+  rec.mat = mat.get();
   return true;
 }
 
@@ -150,7 +164,7 @@ bool plane::hit(const ray& r, real_t t_min, real_t t_max,
   rec.p = r.at(t);
   rec.set_face_normal(r, n);
   get_plane_uv(rec.p, rec.u, rec.v);
-  rec.mat = mat;
+  rec.mat = mat.get();
   return true;
 }
 
@@ -158,7 +172,7 @@ bool plane::bounding_box(real_t time0, real_t time1, aabb& out) const {
   return false;
 }
 
-bool xy_rect::hit(const ray& r, double t_min, double t_max,
+bool xy_rect::hit(const ray& r, real_t t_min, real_t t_max,
                   hit_record& rec) const {
   auto t = (k - r.origin().z()) / r.direction().z();
   if (t < t_min || t > t_max)
@@ -172,7 +186,7 @@ bool xy_rect::hit(const ray& r, double t_min, double t_max,
   rec.t = t;
   auto outward_normal = vec3(0, 0, 1);
   rec.set_face_normal(r, outward_normal);
-  rec.mat = this->mat;
+  rec.mat = this->mat.get();
   rec.p = r.at(t);
   return true;
 }
@@ -183,7 +197,7 @@ bool xy_rect::bounding_box(real_t time0, real_t time1, aabb& out) const {
   return true;
 }
 
-bool xz_rect::hit(const ray& r, double t_min, double t_max,
+bool xz_rect::hit(const ray& r, real_t t_min, real_t t_max,
                   hit_record& rec) const {
   auto t = (k - r.origin().y()) / r.direction().y();
   if (t < t_min || t > t_max)
@@ -197,18 +211,18 @@ bool xz_rect::hit(const ray& r, double t_min, double t_max,
   rec.t = t;
   auto outward_normal = vec3(0, 1, 0);
   rec.set_face_normal(r, outward_normal);
-  rec.mat = mat;
+  rec.mat = mat.get();
   rec.p = r.at(t);
   return true;
 }
 
-bool xz_rect::bounding_box(double time0, double time1, aabb& output_box) const {
+bool xz_rect::bounding_box(real_t time0, real_t time1, aabb& output_box) const {
   output_box = aabb(point3(x0, k - 0.0001, z0),
                     point3(x1, k + 0.0001, z1));  // Pad a little
   return true;
 }
 
-bool yz_rect::hit(const ray& r, double t_min, double t_max,
+bool yz_rect::hit(const ray& r, real_t t_min, real_t t_max,
                   hit_record& rec) const {
   auto t = (k - r.origin().x()) / r.direction().x();
   if (t < t_min || t > t_max)
@@ -222,12 +236,12 @@ bool yz_rect::hit(const ray& r, double t_min, double t_max,
   rec.t = t;
   auto outward_normal = vec3(1, 0, 0);
   rec.set_face_normal(r, outward_normal);
-  rec.mat = mat;
+  rec.mat = mat.get();
   rec.p = r.at(t);
   return true;
 }
 
-bool yz_rect::bounding_box(double time0, double time1, aabb& output_box) const {
+bool yz_rect::bounding_box(real_t time0, real_t time1, aabb& output_box) const {
   output_box = aabb(point3(k - 0.0001, y0, z0),
                     point3(k + 0.0001, y1, z1));  // Pad a little
   return true;
@@ -235,7 +249,7 @@ bool yz_rect::bounding_box(double time0, double time1, aabb& output_box) const {
 
 // Transforms
 
-bool translate::hit(const ray& r, double t_min, double t_max,
+bool translate::hit(const ray& r, real_t t_min, real_t t_max,
                     hit_record& rec) const {
   ray moved_r(r.origin() - offset, r.direction(), r.time());
   if (!ptr->hit(moved_r, t_min, t_max, rec))
@@ -247,7 +261,7 @@ bool translate::hit(const ray& r, double t_min, double t_max,
   return true;
 }
 
-bool translate::bounding_box(double time0, double time1,
+bool translate::bounding_box(real_t time0, real_t time1,
                              aabb& output_box) const {
   if (!ptr->bounding_box(time0, time1, output_box))
     return false;
@@ -257,7 +271,7 @@ bool translate::bounding_box(double time0, double time1,
   return true;
 }
 
-rotate_y::rotate_y(std::shared_ptr<hittable> p, double angle) : ptr(p) {
+rotate_y::rotate_y(std::shared_ptr<hittable> p, real_t angle) : ptr(p) {
   auto radians = deg2rad(angle);
   sin_theta = sin(radians);
   cos_theta = cos(radians);
@@ -289,13 +303,13 @@ rotate_y::rotate_y(std::shared_ptr<hittable> p, double angle) : ptr(p) {
   bbox = aabb(min, max);
 }
 
-bool rotate_y::bounding_box(double time0, double time1,
+bool rotate_y::bounding_box(real_t time0, real_t time1,
                             aabb& output_box) const {
   output_box = bbox;
   return has_box;
 }
 
-bool rotate_y::hit(const ray& r, double t_min, double t_max,
+bool rotate_y::hit(const ray& r, real_t t_min, real_t t_max,
                    hit_record& rec) const {
   auto origin = r.origin();
   auto direction = r.direction();

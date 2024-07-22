@@ -27,19 +27,7 @@ struct hittable {
 struct hittable_list : public hittable {
 
   virtual bool hit(const ray& r, real_t t_min, real_t t_max,
-                   hit_record& rec) const override {
-    hit_record cur_rec;
-    bool hit_anything = false;
-    auto closest_so_far = t_max;
-    for (const auto& obj : objects) {
-      if (obj->hit(r, t_min, closest_so_far, cur_rec)) {
-        hit_anything = true;
-        closest_so_far = cur_rec.t;
-        rec = cur_rec;
-      }
-    }
-    return hit_anything;
-  }
+                   hit_record& rec) const override;
 
   virtual bool bounding_box(double time0, double time1,
                             aabb& output_box) const override;

@@ -20,11 +20,11 @@ class camera {
     viewport_height = viewport_width / aspect_ratio;
   }
 
-  ray ray_to(real_t u, real_t v, bool defocus_blur = true) const {
+  ray ray_to(vec2 const& uv, bool defocus_blur = true) const {
     real_t half_width = viewport_width / 2.0;
     real_t half_height = viewport_height / 2.0;
-    real_t x = (u * viewport_width) - half_width;
-    real_t y = (v * viewport_height) - half_height;
+    real_t x = (uv.x() * viewport_width) - half_width;
+    real_t y = (uv.y() * viewport_height) - half_height;
 
     auto hor = right() * focus_distance;
     auto ver = up() * focus_distance;
